@@ -150,10 +150,7 @@ export class LibreChatClient {
     callbacks: StreamCallbacks,
     signal?: AbortSignal,
   ): Promise<void> {
-    if (this._agentMode) {
-      return this.sendAgent(history, callbacks, signal);
-    }
-    return this.sendModel(history, callbacks, signal);
+    return this.sendAgent(history, callbacks, signal);
   }
 
   private async sendAgent(

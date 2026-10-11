@@ -304,9 +304,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
 
   const agent = client.getAgent();
   const modeLabel = client.isAgentMode() ? "Agent" : "Model";
-  const toolLine = client.isAgentMode()
-    ? chalk.dim(`   Tools: ${client.getToolsEnabled() ? chalk.green(t("repl.tools_on_short")) : chalk.red(t("repl.tools_off_short"))}`)
-    : chalk.dim("   Tools: —");
+  const toolLine = chalk.dim(`   Tools: ${client.getToolsEnabled() ? chalk.green(t("repl.tools_on_short")) : chalk.red(t("repl.tools_off_short"))}`);
   const mcpCount = mcp?.toolCount() ?? 0;
   const mcpLine = mcpCount > 0
     ? chalk.dim(`   MCP: ${mcp!.getServerNames().length} ${mcp!.getServerNames().length > 1 ? t("repl.server_many") : t("repl.server_one")}, ${mcpCount} tools`)
