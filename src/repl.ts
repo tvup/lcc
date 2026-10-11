@@ -447,23 +447,41 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
       continue;
     }
 
-    if (trimmed === "/mcp") {
-      const mcpStatus = mcp ? mcp.status() : [];
-      if (mcpStatus.length === 0) {
-        console.log(chalk.dim(`  ${t("repl.no_mcp")}`));
-        console.log(chalk.dim(`  ${t("repl.mcp_config_hint", join(CONFIG_DIR, "mcp.json"))}:`));
-        console.log(chalk.dim(`  { "mcpServers": { "${t("repl.mcp_example_name")}": { "command": "...", "args": [...] } } }`));
+    if (trimmed === "/mcp" || trimmed.startsWith("/mcp ")) {
+      const arg = trimmed.slice(5).trim();
+      if (arg && mcp) {
+        const allNames = mcp.allServerNames();
+        const target = allNames.find((n) => n.toLowerCase() === arg.toLowerCase());
+        if (target) {
+          const nowEnabled = mcp.toggleServer(target);
+          const label = nowEnabled ? chalk.green(t("repl.tools_on")) : chalk.red(t("repl.tools_off"));
+          console.log(chalk.dim(`  ${target}: ${label}`));
+        } else {
+          console.log(chalk.yellow(`  ${t("repl.mcp_unknown_server", arg)}`));
+        }
       } else {
-        for (const s of mcpStatus) {
-          if (s.error) {
-            console.log(chalk.red(`  ✗ ${s.name}: ${s.error}`));
-          } else {
-            console.log(chalk.green(`  ✓ ${s.name}`) + chalk.dim(` (${s.tools} tools)`));
-            for (const tn of s.toolNames) {
-              const desc = tn.description ? chalk.dim(` — ${tn.description}`) : "";
-              console.log(`    ${chalk.cyan(tn.name)}${desc}`);
+        const mcpStatus = mcp ? mcp.status() : [];
+        if (mcpStatus.length === 0) {
+          console.log(chalk.dim(`  ${t("repl.no_mcp")}`));
+          console.log(chalk.dim(`  ${t("repl.mcp_config_hint", join(CONFIG_DIR, "mcp.json"))}:`));
+          console.log(chalk.dim(`  { "mcpServers": { "${t("repl.mcp_example_name")}": { "command": "...", "args": [...] } } }`));
+        } else {
+          for (const s of mcpStatus) {
+            if (s.error) {
+              console.log(chalk.red(`  ✗ ${s.name}: ${s.error}`));
+            } else {
+              const icon = s.enabled ? chalk.green("✓") : chalk.yellow("○");
+              const status = s.enabled ? "" : chalk.yellow(` (${t("repl.tools_off")})`);
+              console.log(`  ${icon} ${s.name}${status}` + chalk.dim(` (${s.tools} tools)`));
+              if (s.enabled) {
+                for (const tn of s.toolNames) {
+                  const desc = tn.description ? chalk.dim(` — ${tn.description}`) : "";
+                  console.log(`    ${chalk.cyan(tn.name)}${desc}`);
+                }
+              }
             }
           }
+          console.log(chalk.dim(`\n  ${t("repl.mcp_toggle_hint")}`));
         }
       }
       continue;

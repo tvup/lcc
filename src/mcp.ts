@@ -85,6 +85,24 @@ export class McpManager {
   private servers: ConnectedServer[] = [];
   private failed: FailedServer[] = [];
   private toolMap = new Map<string, { server: ConnectedServer; originalName: string }>();
+  private disabledServers = new Set<string>();
+
+  toggleServer(name: string): boolean {
+    if (this.disabledServers.has(name)) {
+      this.disabledServers.delete(name);
+      return true;
+    }
+    this.disabledServers.add(name);
+    return false;
+  }
+
+  isServerEnabled(name: string): boolean {
+    return !this.disabledServers.has(name);
+  }
+
+  private activeServers(): ConnectedServer[] {
+    return this.servers.filter((s) => !this.disabledServers.has(s.name));
+  }
 
   async connectAll(config: McpConfig): Promise<void> {
     const entries = Object.entries(config.mcpServers);
@@ -157,7 +175,7 @@ export class McpManager {
   getToolDefs(): ToolDef[] {
     const defs: ToolDef[] = [];
 
-    for (const server of this.servers) {
+    for (const server of this.activeServers()) {
       for (const tool of server.tools) {
         const namespaced = sanitizeToolName(server.name, tool.name);
         const params = cleanSchema(tool.inputSchema) as Record<string, unknown>;
@@ -177,7 +195,9 @@ export class McpManager {
   }
 
   hasTool(name: string): boolean {
-    return this.toolMap.has(name);
+    const entry = this.toolMap.get(name);
+    if (!entry) return false;
+    return !this.disabledServers.has(entry.server.name);
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
@@ -223,31 +243,38 @@ export class McpManager {
   }
 
   getServerNames(): string[] {
+    return this.activeServers().map((s) => s.name);
+  }
+
+  allServerNames(): string[] {
     return this.servers.map((s) => s.name);
   }
 
   toolCount(): number {
-    return this.toolMap.size;
+    let count = 0;
+    for (const s of this.activeServers()) count += s.tools.length;
+    return count;
   }
 
-  status(): Array<{ name: string; tools: number; toolNames: Array<{ name: string; description?: string }>; error?: string }> {
-    const result: Array<{ name: string; tools: number; toolNames: Array<{ name: string; description?: string }>; error?: string }> = [];
+  status(): Array<{ name: string; tools: number; toolNames: Array<{ name: string; description?: string }>; error?: string; enabled: boolean }> {
+    const result: Array<{ name: string; tools: number; toolNames: Array<{ name: string; description?: string }>; error?: string; enabled: boolean }> = [];
     for (const s of this.servers) {
       result.push({
         name: s.name,
         tools: s.tools.length,
         toolNames: s.tools.map((item) => ({ name: item.name, description: item.description })),
+        enabled: !this.disabledServers.has(s.name),
       });
     }
     for (const f of this.failed) {
-      result.push({ name: f.name, tools: 0, toolNames: [], error: f.error });
+      result.push({ name: f.name, tools: 0, toolNames: [], error: f.error, enabled: false });
     }
     return result;
   }
 
   mcpToolSummary(): string {
     const lines: string[] = [];
-    for (const server of this.servers) {
+    for (const server of this.activeServers()) {
       const names = server.tools.map((item) => sanitizeToolName(server.name, item.name)).join(", ");
       lines.push(`${server.name}: ${names}`);
     }
@@ -256,7 +283,7 @@ export class McpManager {
 
   getToolCatalog(): Array<{ name: string; description: string }> {
     const catalog: Array<{ name: string; description: string }> = [];
-    for (const server of this.servers) {
+    for (const server of this.activeServers()) {
       for (const tool of server.tools) {
         catalog.push({
           name: sanitizeToolName(server.name, tool.name),
@@ -269,7 +296,7 @@ export class McpManager {
 
   getToolDefsByNames(names: Set<string>): ToolDef[] {
     const defs: ToolDef[] = [];
-    for (const server of this.servers) {
+    for (const server of this.activeServers()) {
       for (const tool of server.tools) {
         const namespaced = sanitizeToolName(server.name, tool.name);
         if (!names.has(namespaced)) continue;
