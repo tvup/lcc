@@ -1,4 +1,5 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Config } from "./config.js";
 import { toolDefinitions, executeTool, type ToolDef } from "./tools.js";
 import type { McpManager } from "./mcp.js";
@@ -294,6 +295,19 @@ export class LibreChatClient {
       fileList = entries.join(", ");
     } catch { /* ignore */ }
 
+    let instructions = "";
+    for (const name of ["AGENTS.md", "CLAUDE.md"]) {
+      const p = join(cwd, name);
+      if (existsSync(p)) {
+        try {
+          const content = readFileSync(p, "utf-8").trim();
+          if (content) {
+            instructions += `\n\n[${name}]\n${content}`;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
     let mcpInfo = "";
     if (this.mcp && this.mcp.toolCount() > 0) {
       const catalog = this.mcp.getToolCatalog();
@@ -308,7 +322,7 @@ export class LibreChatClient {
       {
         type: "message",
         role: "user",
-        content: `[${t("ctx.label")}] ${t("ctx.working_in")} ${cwd}\n${t("ctx.files_in_root")} ${fileList}\n\n${t("ctx.system")}${mcpInfo}`,
+        content: `[${t("ctx.label")}] ${t("ctx.working_in")} ${cwd}\n${t("ctx.files_in_root")} ${fileList}\n\n${t("ctx.system")}${instructions}${mcpInfo}`,
       },
       {
         type: "message",

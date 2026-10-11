@@ -315,13 +315,18 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
   const mcpLine = mcpCount > 0
     ? chalk.dim(`   MCP: ${mcp!.getServerNames().length} ${mcp!.getServerNames().length > 1 ? t("repl.server_many") : t("repl.server_one")}, ${mcpCount} tools`)
     : "";
+  const instructionFiles = ["AGENTS.md", "CLAUDE.md"].filter((f) => existsSync(join(process.cwd(), f)));
+  const instrLine = instructionFiles.length > 0
+    ? chalk.dim(`   ${t("repl.instructions_loaded", instructionFiles.join(", "))}`)
+    : "";
+  const infoLines = [mcpLine, instrLine].filter(Boolean);
   console.log(
     "\n" +
     chalk.cyan("    /\\_/\\") + "   " + chalk.bold.cyan("lcc") + chalk.dim(` v${PKG.version} — LibreChat Code`) + "\n" +
     chalk.cyan("   ( ● ● )") + chalk.dim(`  ${modeLabel}: ${agent}`) + "\n" +
     chalk.cyan("    > ▽ <") + toolLine + "\n" +
-    chalk.cyan("   /|   |\\") + (mcpLine || chalk.dim(`  ${t("repl.help_commands")}`)) + "\n" +
-    chalk.cyan("  (_|   |_)") + (mcpLine ? chalk.dim(`  ${t("repl.help_commands")}`) : "") + "\n"
+    chalk.cyan("   /|   |\\") + (infoLines[0] || chalk.dim(`  ${t("repl.help_commands")}`)) + "\n" +
+    chalk.cyan("  (_|   |_)") + (infoLines[1] || (infoLines[0] ? chalk.dim(`  ${t("repl.help_commands")}`) : "")) + "\n"
   );
 
   const sessions = listSessions();

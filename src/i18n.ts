@@ -163,6 +163,7 @@ const da: Record<string, string> = {
   "repl.skills_hint": "Opret .lcc/commands/<navn>.md for projektskills, eller ~/.config/lcc/commands/<navn>.md for globale.",
   "repl.skill_source_project": "projekt",
   "repl.skill_source_user": "bruger",
+  "repl.instructions_loaded": "📋 {0}",
 
   // Error formatting
   "err.connection": "Kan ikke forbinde til serveren. Tjek LIBRECHAT_URL.",
@@ -376,6 +377,7 @@ const en: Record<string, string> = {
   "repl.skills_hint": "Create .lcc/commands/<name>.md for project skills, or ~/.config/lcc/commands/<name>.md for global ones.",
   "repl.skill_source_project": "project",
   "repl.skill_source_user": "user",
+  "repl.instructions_loaded": "📋 {0}",
 
   // Error formatting
   "err.connection": "Cannot connect to the server. Check LIBRECHAT_URL.",
