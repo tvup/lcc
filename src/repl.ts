@@ -185,8 +185,18 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
   let voiceSettings = loadVoiceSettings();
   const voice = new VoiceInput(rl, stdout, mainPrompt, () => voiceSettings);
 
-  function cursorCol(): number {
-    return 3 + ((rl as unknown as { cursor: number }).cursor ?? 0);
+  const PROMPT_WIDTH = 2; // visible chars in "❯ "
+
+  function cursorScreenCol(): number {
+    const cols = stdout.columns || 80;
+    const cursor = (rl as unknown as { cursor: number }).cursor ?? 0;
+    return ((PROMPT_WIDTH + cursor) % cols) + 1;
+  }
+
+  function inputWrapRows(): number {
+    const cols = stdout.columns || 80;
+    const lineLen = ((rl as unknown as { line: string }).line ?? "").length;
+    return Math.floor((PROMPT_WIDTH + lineLen) / cols);
   }
 
   function clearHints(): void {
@@ -194,7 +204,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     for (let i = 0; i < hintLines; i++) {
       stdout.write("\n\x1b[2K");
     }
-    stdout.write(`\x1b[${hintLines}A\x1b[${cursorCol()}G`);
+    stdout.write(`\x1b[${hintLines}A\x1b[${cursorScreenCol()}G`);
     hintLines = 0;
   }
 
@@ -220,7 +230,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     if (hints.length === 0) {
       const cursor = (rl as unknown as { cursor: number }).cursor ?? line.length;
       const at = findAtToken(line, cursor);
-      if (at) {
+      if (at && at.partial.length > 0) {
         const matches = matchFiles(at.partial);
         hints = matches.map((m) => {
           const icon = m.isDir ? "📁" : isImageFile(m.path) ? "🖼" : "📄";
@@ -230,6 +240,10 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     }
 
     if (hints.length === 0) return;
+
+    // Skip hints when input wraps — cursor restoration is unreliable across wrapped rows
+    const wrapRows = inputWrapRows();
+    if (wrapRows > 0 && !line.startsWith("/")) return;
 
     const width = (stdout.columns || 80) - 1;
     for (const h of hints) {
@@ -245,7 +259,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
       stdout.write(`\n\x1b[2K${highlighted}`);
     }
     hintLines = hints.length;
-    stdout.write(`\x1b[${hintLines}A\x1b[${cursorCol()}G`);
+    stdout.write(`\x1b[${hintLines}A\x1b[${cursorScreenCol()}G`);
   }
 
   if (stdin.isTTY) {
