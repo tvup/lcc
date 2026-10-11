@@ -158,6 +158,11 @@ const da: Record<string, string> = {
   "repl.session_entry": "{0}. {1}  ({2} beskeder)  {3}",
   "repl.session_select": "Vælg (1-{0}), 0 for ny, eller Enter for seneste:",
   "repl.new_session": "Ny session startet.",
+  "repl.skill_invoked": "Kører /{0}...",
+  "repl.skills_header": "Skills:",
+  "repl.skills_hint": "Opret .lcc/commands/<navn>.md for projektskills, eller ~/.config/lcc/commands/<navn>.md for globale.",
+  "repl.skill_source_project": "projekt",
+  "repl.skill_source_user": "bruger",
 
   // Error formatting
   "err.connection": "Kan ikke forbinde til serveren. Tjek LIBRECHAT_URL.",
@@ -366,6 +371,11 @@ const en: Record<string, string> = {
   "repl.session_entry": "{0}. {1}  ({2} messages)  {3}",
   "repl.session_select": "Select (1-{0}), 0 for new, or Enter for latest:",
   "repl.new_session": "New session started.",
+  "repl.skill_invoked": "Running /{0}...",
+  "repl.skills_header": "Skills:",
+  "repl.skills_hint": "Create .lcc/commands/<name>.md for project skills, or ~/.config/lcc/commands/<name>.md for global ones.",
+  "repl.skill_source_project": "project",
+  "repl.skill_source_user": "user",
 
   // Error formatting
   "err.connection": "Cannot connect to the server. Check LIBRECHAT_URL.",

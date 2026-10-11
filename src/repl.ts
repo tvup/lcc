@@ -9,6 +9,7 @@ import { LibreChatClient, type InputItem, type ContentPart } from "./client.js";
 import { loadConfig, saveConfig, CONFIG_DIR } from "./config.js";
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
+import { loadSkills, findSkill, renderSkill, type Skill } from "./skills.js";
 import { Spinner } from "./spinner.js";
 import { t, setLocale, getLocale, confirmYes, confirmHint } from "./i18n.js";
 import {
@@ -134,7 +135,12 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     { cmd: "/voice", desc: t("cmd.voice") },
     { cmd: "/exit", desc: t("cmd.exit") },
   ];
-  const commands = [...commandDefs.map((c) => c.cmd), "/quit"];
+  const skills = loadSkills();
+  const skillDefs = skills.map((s) => ({
+    cmd: `/${s.name}`,
+    desc: s.description || (s.source === "project" ? t("repl.skill_source_project") : t("repl.skill_source_user")),
+  }));
+  const commands = [...commandDefs.map((c) => c.cmd), ...skillDefs.map((s) => s.cmd), "/quit"];
   let cachedModelIds: string[] = [];
   let hintLines = 0;
   let modelsFetched = false;
@@ -222,7 +228,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
           .map((id) => ({ label: `/model ${id}`, desc: "", matchLen: line.length }));
       }
     } else if (line.startsWith("/")) {
-      hints = commandDefs
+      hints = [...commandDefs, ...skillDefs]
         .filter((c) => c.cmd.startsWith(line))
         .map((c) => ({ label: c.cmd, desc: c.desc, matchLen: line.length }));
     }
@@ -385,9 +391,17 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
         console.log(`  ${chalk.cyan(c.cmd.padEnd(12))} ${chalk.dim(c.desc)}`);
       }
       console.log(`  ${chalk.cyan("/quit".padEnd(12))} ${chalk.dim(t("cmd.quit_alias"))}`);
+      if (skills.length > 0) {
+        console.log(chalk.dim(`\n  ${t("repl.skills_header")}`));
+        for (const s of skills) {
+          const source = chalk.dim(`[${s.source === "project" ? t("repl.skill_source_project") : t("repl.skill_source_user")}]`);
+          console.log(`  ${chalk.cyan(`/${s.name}`.padEnd(12))} ${chalk.dim(s.description || "")} ${source}`);
+        }
+      }
       console.log(`\n  ${chalk.dim(t("repl.ctrl_c"))}`);
       console.log(`  ${chalk.dim(t("repl.multiline"))}`);
       console.log(`  ${chalk.dim(t("repl.voice_hint"))}`);
+      console.log(`  ${chalk.dim(t("repl.skills_hint"))}`);
       console.log("");
       continue;
     }
@@ -522,6 +536,65 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     }
 
     if (trimmed.startsWith("/")) {
+      const slashName = trimmed.split(" ")[0]!.slice(1);
+      const skillArgs = trimmed.slice(slashName.length + 2).trim();
+      const skill = findSkill(skills, slashName);
+      if (skill) {
+        const rendered = renderSkill(skill, skillArgs);
+        console.log(chalk.dim(`  ${t("repl.skill_invoked", skill.name)}`));
+        const userItem: InputItem = { type: "message", role: "user", content: rendered };
+        history.push(userItem);
+
+        abortController = new AbortController();
+        const ac = abortController;
+        stdout.write("\n");
+        const md = new MarkdownRenderer();
+        spinner.start(t("repl.spinner_thinking"));
+
+        await new Promise<void>((resolve) => {
+          client
+            .send(
+              history,
+              {
+                onDelta: (text) => { spinner.stop(); stdout.write(md.write(text)); },
+                onToolCall: (name, args) => {
+                  spinner.stop(); stdout.write(md.flush());
+                  const argsStr = Object.entries(args).map(([k, v]) => {
+                    const val = typeof v === "string" && v.length > 80 ? v.slice(0, 77) + "..." : String(v);
+                    return `${k}=${val}`;
+                  }).join(", ");
+                  stdout.write(chalk.dim(`\n  ⚡ ${name}(${argsStr})\n`));
+                  spinner.start(t("repl.spinner_running"));
+                },
+                onToolResult: (name, result) => {
+                  spinner.stop();
+                  const lines = result.split("\n");
+                  const preview = lines.length > 5 ? lines.slice(0, 5).join("\n") + `\n  ... (${t("repl.lines_total", lines.length)})` : result;
+                  stdout.write(chalk.dim(`  ← ${name}: ${preview}\n\n`));
+                  spinner.start(t("repl.spinner_thinking"));
+                },
+                onDone: (fullText) => {
+                  spinner.stop(); stdout.write(md.flush());
+                  if (fullText) history.push({ type: "message", role: "assistant", content: fullText });
+                  autoSave(history);
+                  stdout.write("\n\n");
+                  abortController = null;
+                  resolve();
+                },
+                onError: (error) => {
+                  spinner.stop(); stdout.write(md.flush());
+                  console.log(chalk.red(`\n  ${t("repl.error", formatError(error))}`));
+                  history.pop();
+                  abortController = null;
+                  resolve();
+                },
+              },
+              ac.signal,
+            )
+            .finally(() => { spinner.stop(); abortController = null; resolve(); });
+        });
+        continue;
+      }
       console.log(chalk.yellow(`  ${t("repl.unknown_cmd", trimmed.split(" ")[0]!)}`));
       continue;
     }
