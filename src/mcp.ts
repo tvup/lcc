@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
@@ -33,6 +33,7 @@ interface FailedServer {
 }
 
 const MCP_CONFIG_FILE = join(CONFIG_DIR, "mcp.json");
+const MCP_STATE_FILE = join(CONFIG_DIR, "mcp-state.json");
 
 function withTimeout<T>(promise: Promise<T>, ms: number, msg: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -87,12 +88,33 @@ export class McpManager {
   private toolMap = new Map<string, { server: ConnectedServer; originalName: string }>();
   private disabledServers = new Set<string>();
 
+  private loadDisabledState(): void {
+    try {
+      const raw = readFileSync(MCP_STATE_FILE, "utf-8");
+      const parsed = JSON.parse(raw) as { disabledServers?: string[] };
+      if (Array.isArray(parsed.disabledServers)) {
+        for (const name of parsed.disabledServers) {
+          if (typeof name === "string") this.disabledServers.add(name);
+        }
+      }
+    } catch { /* no state file yet */ }
+  }
+
+  private saveDisabledState(): void {
+    try {
+      mkdirSync(CONFIG_DIR, { recursive: true });
+      writeFileSync(MCP_STATE_FILE, JSON.stringify({ disabledServers: [...this.disabledServers] }, null, 2) + "\n", "utf-8");
+    } catch { /* best effort */ }
+  }
+
   toggleServer(name: string): boolean {
     if (this.disabledServers.has(name)) {
       this.disabledServers.delete(name);
+      this.saveDisabledState();
       return true;
     }
     this.disabledServers.add(name);
+    this.saveDisabledState();
     return false;
   }
 
@@ -105,6 +127,7 @@ export class McpManager {
   }
 
   async connectAll(config: McpConfig): Promise<void> {
+    this.loadDisabledState();
     const entries = Object.entries(config.mcpServers);
     if (entries.length === 0) return;
 
