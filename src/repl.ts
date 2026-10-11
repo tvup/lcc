@@ -334,16 +334,19 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     console.log("");
     try {
       const answer = await rl.question(chalk.dim(`  ${t("repl.session_select", sessions.length)} `));
-      const idx = parseInt(answer.trim(), 10) - 1;
-      const picked = sessions[idx];
-      if (picked) {
-        const items = loadSessionFile(picked.file);
-        if (items.length > 0) {
-          history.push(...items);
-          console.log(chalk.dim(`  ${t("repl.messages_loaded", items.length)}\n`));
-        }
-      } else if (answer.trim() === "") {
+      const trimmedAnswer = answer.trim();
+      if (trimmedAnswer === "0") {
         console.log(chalk.dim(`  ${t("repl.new_session")}\n`));
+      } else {
+        const idx = trimmedAnswer === "" ? 0 : parseInt(trimmedAnswer, 10) - 1;
+        const picked = sessions[idx];
+        if (picked) {
+          const items = loadSessionFile(picked.file);
+          if (items.length > 0) {
+            history.push(...items);
+            console.log(chalk.dim(`  ${t("repl.messages_loaded", items.length)}\n`));
+          }
+        }
       }
     } catch { /* ignore */ }
   }
