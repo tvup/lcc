@@ -321,7 +321,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
   if (hasAgentsMd) {
     instrLine = `   ${t("repl.instructions_loaded", "AGENTS.md")}`;
   } else if (hasClaudeMd) {
-    instrLine = chalk.rgb(18, 18, 18)(`   ${t("repl.instructions_loaded", "CLAUDE.md")}`);
+    instrLine = chalk.rgb(35, 35, 35)(`   ${t("repl.instructions_loaded", "CLAUDE.md")}`);
   }
   const infoLines = [mcpLine, instrLine].filter(Boolean);
   console.log(
