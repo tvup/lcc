@@ -2,10 +2,10 @@ import * as readline from "node:readline/promises";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { stdin, stdout } from "node:process";
-import { dirname, join } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { LibreChatClient, type InputItem } from "./client.js";
+import { LibreChatClient, type InputItem, type ContentPart } from "./client.js";
 import { loadConfig, saveConfig, CONFIG_DIR } from "./config.js";
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
@@ -24,6 +24,95 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8")) as { version: string };
+
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"]);
+
+function isImageFile(path: string): boolean {
+  return IMAGE_EXTS.has(extname(path).toLowerCase());
+}
+
+function textOfContent(content: string | ContentPart[]): string {
+  if (typeof content === "string") return content;
+  return content.filter((p) => p.type === "input_text").map((p) => (p as { text: string }).text).join(" ");
+}
+
+function findAtToken(line: string, cursor: number): { partial: string; start: number } | null {
+  let i = cursor - 1;
+  while (i >= 0 && line[i] !== " " && line[i] !== "\t") i--;
+  i++;
+  if (line[i] !== "@") return null;
+  return { partial: line.slice(i + 1, cursor), start: i };
+}
+
+function matchFiles(partial: string): Array<{ path: string; isDir: boolean }> {
+  const cwd = process.cwd();
+  const dir = partial.includes("/") ? dirname(partial) : ".";
+  const prefix = partial.includes("/") ? basename(partial) : partial;
+  const absDir = resolve(cwd, dir);
+
+  try {
+    const entries = readdirSync(absDir, { withFileTypes: true });
+    return entries
+      .filter((e) => !e.name.startsWith(".") && e.name.toLowerCase().startsWith(prefix.toLowerCase()))
+      .slice(0, 8)
+      .map((e) => ({
+        path: dir === "." ? e.name : join(dir, e.name),
+        isDir: e.isDirectory(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function buildMultiPartMessage(text: string): InputItem {
+  const atPattern = /@((?:[^\s@?!,;:(){}[\]]|(?<=\\) )+)/g;
+  const parts: ContentPart[] = [];
+  const filePaths: string[] = [];
+  let cleanText = text;
+  let match: RegExpExecArray | null;
+  const cwd = process.cwd();
+
+  while ((match = atPattern.exec(text)) !== null) {
+    const rawPath = match[1]!.replace(/\\ /g, " ");
+    const absPath = resolve(cwd, rawPath);
+    if (!existsSync(absPath) || statSync(absPath).isDirectory()) continue;
+    filePaths.push(rawPath);
+  }
+
+  if (filePaths.length === 0) {
+    return { type: "message", role: "user", content: text };
+  }
+
+  for (const fp of filePaths) {
+    cleanText = cleanText.replace(new RegExp(`@${fp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g"), "").trim();
+  }
+
+  const textParts: string[] = [];
+  if (cleanText) textParts.push(cleanText);
+
+  for (const fp of filePaths) {
+    const absPath = resolve(cwd, fp);
+    if (isImageFile(fp)) {
+      try {
+        const data = readFileSync(absPath);
+        const ext = extname(fp).toLowerCase().replace(".", "");
+        const mime = ext === "jpg" ? "jpeg" : ext === "svg" ? "svg+xml" : ext;
+        parts.push({ type: "input_image", image_url: `data:image/${mime};base64,${data.toString("base64")}` });
+      } catch { /* skip unreadable */ }
+    } else {
+      try {
+        const content = readFileSync(absPath, "utf-8");
+        textParts.push(`[File: ${fp}]\n\`\`\`\n${content}\n\`\`\``);
+      } catch { /* skip unreadable */ }
+    }
+  }
+
+  if (textParts.length > 0) {
+    parts.unshift({ type: "input_text", text: textParts.join("\n\n") });
+  }
+
+  return { type: "message", role: "user", content: parts };
+}
 
 export async function startRepl(client: LibreChatClient, mcp?: McpManager): Promise<void> {
   const history: InputItem[] = [];
@@ -69,6 +158,16 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
       const hits = commands.filter((c) => c.startsWith(line));
       return [hits, line];
     }
+    const cursor = (rl as unknown as { cursor: number }).cursor ?? line.length;
+    const at = findAtToken(line, cursor);
+    if (at) {
+      const matches = matchFiles(at.partial);
+      if (matches.length > 0) {
+        const prefix = line.slice(0, at.start) + "@";
+        const completions = matches.map((m) => prefix + m.path + (m.isDir ? "/" : "") + line.slice(cursor));
+        return [completions, line];
+      }
+    }
     return [[], line];
   }
 
@@ -101,9 +200,8 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
 
   function showHints(line: string): void {
     clearHints();
-    if (!line.startsWith("/")) return;
 
-    let hints: Array<{ label: string; desc: string }> = [];
+    let hints: Array<{ label: string; desc: string; matchLen: number }> = [];
 
     if (line.startsWith("/model ")) {
       const partial = line.slice(7);
@@ -111,28 +209,38 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
         hints = cachedModelIds
           .filter((id) => id.startsWith(partial))
           .slice(0, 6)
-          .map((id) => ({ label: `/model ${id}`, desc: "" }));
+          .map((id) => ({ label: `/model ${id}`, desc: "", matchLen: line.length }));
       }
-    } else {
+    } else if (line.startsWith("/")) {
       hints = commandDefs
         .filter((c) => c.cmd.startsWith(line))
-        .map((c) => ({ label: c.cmd, desc: c.desc }));
+        .map((c) => ({ label: c.cmd, desc: c.desc, matchLen: line.length }));
+    }
+
+    if (hints.length === 0) {
+      const cursor = (rl as unknown as { cursor: number }).cursor ?? line.length;
+      const at = findAtToken(line, cursor);
+      if (at) {
+        const matches = matchFiles(at.partial);
+        hints = matches.map((m) => {
+          const icon = m.isDir ? "📁" : isImageFile(m.path) ? "🖼" : "📄";
+          return { label: `@${m.path}${m.isDir ? "/" : ""}`, desc: icon, matchLen: 1 + at.partial.length };
+        });
+      }
     }
 
     if (hints.length === 0) return;
 
-    // A hint that wraps leaves a row behind that clearHints() cannot reach.
     const width = (stdout.columns || 80) - 1;
     for (const h of hints) {
-      const matchLen = line.length;
       const label = h.label.slice(0, Math.max(0, width - 3));
       const room = width - 3 - label.length - 2;
       let desc = h.desc;
       if (desc.length > room) desc = room > 1 ? desc.slice(0, room - 1) + "…" : "";
       const highlighted =
         chalk.dim("   ") +
-        chalk.bold.white(label.slice(0, matchLen)) +
-        chalk.cyan(label.slice(matchLen)) +
+        chalk.bold.white(label.slice(0, h.matchLen)) +
+        chalk.cyan(label.slice(h.matchLen)) +
         (desc ? chalk.dim(`  ${desc}`) : "");
       stdout.write(`\n\x1b[2K${highlighted}`);
     }
@@ -374,7 +482,24 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
       continue;
     }
 
-    history.push({ type: "message", role: "user", content: trimmed });
+    const userItem = trimmed.includes("@") ? buildMultiPartMessage(trimmed) : { type: "message" as const, role: "user" as const, content: trimmed };
+    history.push(userItem);
+
+    if (userItem.type === "message" && Array.isArray(userItem.content)) {
+      for (const part of userItem.content) {
+        if (part.type === "input_image") {
+          const sizeKb = Math.round(part.image_url.length * 0.75 / 1024);
+          stdout.write(chalk.dim(`  ${t("repl.image_attached", `${sizeKb} KB`)}\n`));
+        } else if (part.type === "input_text" && part.text.includes("[File: ")) {
+          const fileRefs = part.text.match(/\[File: ([^\]]+)\]/g);
+          if (fileRefs) {
+            for (const ref of fileRefs) {
+              stdout.write(chalk.dim(`  ${t("repl.file_attached", ref.slice(7, -1))}\n`));
+            }
+          }
+        }
+      }
+    }
 
     abortController = new AbortController();
     const ac = abortController;
@@ -778,7 +903,7 @@ function listSessions(): SessionInfo[] {
 function sessionInfoFrom(file: string, items: InputItem[], mtimeMs: number): SessionInfo {
   const userMsgs = items.filter((m) => m.type === "message" && m.role === "user");
   const lastMsg = userMsgs[userMsgs.length - 1];
-  const preview = lastMsg && lastMsg.type === "message" ? lastMsg.content.slice(0, 60).replace(/\n/g, " ") : "…";
+  const preview = lastMsg && lastMsg.type === "message" ? textOfContent(lastMsg.content).slice(0, 60).replace(/\n/g, " ") : "…";
   const date = new Date(mtimeMs).toLocaleDateString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   return { file, preview, msgCount: userMsgs.length, date, mtime: mtimeMs };
 }
@@ -827,7 +952,8 @@ function doSave(history: InputItem[], name: string): void {
 function firstWords(history: InputItem[]): string {
   const first = history.find((m) => m.type === "message" && m.role === "user");
   if (!first || first.type !== "message") return "";
-  return first.content.slice(0, 40).replace(/[^a-zA-Z0-9æøåÆØÅ ]/g, "").trim().replace(/ +/g, "-").toLowerCase();
+  const txt = textOfContent(first.content);
+  return txt.slice(0, 40).replace(/[^a-zA-Z0-9æøåÆØÅ ]/g, "").trim().replace(/ +/g, "-").toLowerCase();
 }
 
 async function doLoad(rl: readline.Interface): Promise<InputItem[] | null> {

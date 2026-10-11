@@ -4,8 +4,12 @@ import { toolDefinitions, executeTool, type ToolDef } from "./tools.js";
 import type { McpManager } from "./mcp.js";
 import { t } from "./i18n.js";
 
+export type ContentPart =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string };
+
 export type InputItem =
-  | { type: "message"; role: "user" | "assistant"; content: string }
+  | { type: "message"; role: "user" | "assistant"; content: string | ContentPart[] }
   | {
       type: "function_call";
       id: string;
