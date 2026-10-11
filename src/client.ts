@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import type { Config } from "./config.js";
 import { toolDefinitions, executeTool, type ToolDef } from "./tools.js";
 import type { McpManager } from "./mcp.js";
@@ -295,6 +296,18 @@ export class LibreChatClient {
       fileList = entries.join(", ");
     } catch { /* ignore */ }
 
+    let gitInfo = "";
+    try {
+      const git = (cmd: string) => execSync(cmd, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+      const branch = git("git rev-parse --abbrev-ref HEAD");
+      const user = git("git config user.name");
+      const status = git("git status --short -u");
+      const log = git("git log --oneline -5");
+      gitInfo = `\n\nGit:\n  Branch: ${branch}\n  User: ${user}`;
+      if (status) gitInfo += `\n  Status:\n${status.split("\n").map((l) => `    ${l}`).join("\n")}`;
+      if (log) gitInfo += `\n  Recent commits:\n${log.split("\n").map((l) => `    ${l}`).join("\n")}`;
+    } catch { /* not a git repo */ }
+
     let instructions = "";
     for (const name of ["AGENTS.md", "CLAUDE.md"]) {
       const p = join(cwd, name);
@@ -322,7 +335,7 @@ export class LibreChatClient {
       {
         type: "message",
         role: "user",
-        content: `[${t("ctx.label")}] ${t("ctx.working_in")} ${cwd}\n${t("ctx.files_in_root")} ${fileList}\n\n${t("ctx.system")}${instructions}${mcpInfo}`,
+        content: `[${t("ctx.label")}] ${t("ctx.working_in")} ${cwd}\n${t("ctx.files_in_root")} ${fileList}${gitInfo}\n\n${t("ctx.system")}${instructions}${mcpInfo}`,
       },
       {
         type: "message",
