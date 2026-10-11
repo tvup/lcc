@@ -149,6 +149,10 @@ const da: Record<string, string> = {
   "repl.prev_session": "Forrige session fundet ({0} beskeder, sidst: \"{1}\")",
   "repl.continue_prompt": "Fortsæt?",
   "repl.messages_loaded": "{0} beskeder indlæst.",
+  "repl.sessions_header": "Tidligere sessioner:",
+  "repl.session_entry": "{0}. {1}  ({2} beskeder)  {3}",
+  "repl.session_select": "Vælg (1-{0}), eller Enter for ny session:",
+  "repl.new_session": "Ny session startet.",
 
   // Error formatting
   "err.connection": "Kan ikke forbinde til serveren. Tjek LIBRECHAT_URL.",
@@ -348,6 +352,10 @@ const en: Record<string, string> = {
   "repl.prev_session": "Previous session found ({0} messages, last: \"{1}\")",
   "repl.continue_prompt": "Continue?",
   "repl.messages_loaded": "{0} messages loaded.",
+  "repl.sessions_header": "Previous sessions:",
+  "repl.session_entry": "{0}. {1}  ({2} messages)  {3}",
+  "repl.session_select": "Select (1-{0}), or Enter for new session:",
+  "repl.new_session": "New session started.",
 
   // Error formatting
   "err.connection": "Cannot connect to the server. Check LIBRECHAT_URL.",
