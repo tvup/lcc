@@ -129,20 +129,34 @@ export class LibreChatClient {
 
   async listLLMModels(): Promise<string[]> {
     const rootUrl = this.baseUrl.replace(/\/api\/agents\/v1$/, "");
-    try {
-      const res = await fetch(`${rootUrl}/api/models`, {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-      });
-      if (!res.ok) return [];
-      const data = (await res.json()) as Record<string, string[]>;
-      const all: string[] = [];
-      for (const models of Object.values(data)) {
-        if (Array.isArray(models)) all.push(...models);
-      }
-      return [...new Set(all)].sort();
-    } catch {
-      return [];
+    const all: string[] = [];
+    const endpoints = ["/api/models", "/api/endpoints"];
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(`${rootUrl}${ep}`, {
+          headers: { Authorization: `Bearer ${this.apiKey}` },
+        });
+        if (!res.ok) continue;
+        const data = (await res.json()) as unknown;
+        if (Array.isArray(data)) {
+          for (const item of data) {
+            if (typeof item === "string") all.push(item);
+            else if (item && typeof item === "object" && "id" in item) all.push(String((item as { id: string }).id));
+          }
+        } else if (data && typeof data === "object") {
+          for (const val of Object.values(data as Record<string, unknown>)) {
+            if (Array.isArray(val)) {
+              for (const item of val) {
+                if (typeof item === "string") all.push(item);
+                else if (item && typeof item === "object" && "id" in item) all.push(String((item as { id: string }).id));
+              }
+            }
+          }
+        }
+        if (all.length > 0) break;
+      } catch { /* try next endpoint */ }
     }
+    return [...new Set(all)].sort();
   }
 
   async send(
