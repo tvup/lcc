@@ -315,10 +315,14 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
   const mcpLine = mcpCount > 0
     ? chalk.dim(`   MCP: ${mcp!.getServerNames().length} ${mcp!.getServerNames().length > 1 ? t("repl.server_many") : t("repl.server_one")}, ${mcpCount} tools`)
     : "";
-  const instructionFiles = ["AGENTS.md", "CLAUDE.md"].filter((f) => existsSync(join(process.cwd(), f)));
-  const instrLine = instructionFiles.length > 0
-    ? `   ${t("repl.instructions_loaded", instructionFiles.join(", "))}`
-    : "";
+  const hasAgentsMd = existsSync(join(process.cwd(), "AGENTS.md"));
+  const hasClaudeMd = existsSync(join(process.cwd(), "CLAUDE.md"));
+  let instrLine = "";
+  if (hasAgentsMd) {
+    instrLine = `   ${t("repl.instructions_loaded", "AGENTS.md")}`;
+  } else if (hasClaudeMd) {
+    instrLine = chalk.dim(`   ${t("repl.instructions_loaded", "CLAUDE.md")}`);
+  }
   const infoLines = [mcpLine, instrLine].filter(Boolean);
   console.log(
     "\n" +
