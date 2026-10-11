@@ -1,5 +1,5 @@
 import * as readline from "node:readline/promises";
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { stdin, stdout } from "node:process";
 import { dirname, join } from "node:path";
@@ -198,17 +198,30 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     chalk.cyan("  (_|   |_)") + (mcpLine ? chalk.dim(`  ${t("repl.help_commands")}`) : "") + "\n"
   );
 
-  const previousSession = autoLoad();
-  if (previousSession.length > 0) {
-    const msgCount = previousSession.filter((m) => m.type === "message" && m.role === "user").length;
-    const lastMsg = previousSession.filter((m) => m.type === "message" && m.role === "user").pop();
-    const preview = lastMsg && lastMsg.type === "message" ? lastMsg.content.slice(0, 60) : "";
-    console.log(chalk.dim(`  ${t("repl.prev_session", msgCount, `${preview}${preview.length >= 60 ? "..." : ""}`)}`));
+  const sessions = listSessions();
+  if (sessions.length > 0) {
+    console.log(chalk.dim(`  ${t("repl.sessions_header")}`));
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i]!;
+      const idx = chalk.cyan(String(i + 1));
+      const preview = s.preview.length > 50 ? s.preview.slice(0, 50) + "…" : s.preview;
+      const date = chalk.dim(s.date);
+      const msgs = chalk.dim(`(${s.msgCount})`);
+      console.log(`  ${idx}. ${preview}  ${msgs}  ${date}`);
+    }
+    console.log("");
     try {
-      const answer = await rl.question(chalk.dim(`  ${t("repl.continue_prompt")} (${confirmHint()}) `));
-      if (confirmYes(answer)) {
-        history.push(...previousSession);
-        console.log(chalk.dim(`  ${t("repl.messages_loaded", previousSession.length)}\n`));
+      const answer = await rl.question(chalk.dim(`  ${t("repl.session_select", sessions.length)} `));
+      const idx = parseInt(answer.trim(), 10) - 1;
+      const picked = sessions[idx];
+      if (picked) {
+        const items = loadSessionFile(picked.file);
+        if (items.length > 0) {
+          history.push(...items);
+          console.log(chalk.dim(`  ${t("repl.messages_loaded", items.length)}\n`));
+        }
+      } else if (answer.trim() === "") {
+        console.log(chalk.dim(`  ${t("repl.new_session")}\n`));
       }
     } catch { /* ignore */ }
   }
@@ -685,8 +698,12 @@ async function doConfig(
   }
 }
 
-const CONV_DIR = join(CONFIG_DIR, "conversations");
-const AUTOSAVE_FILE = join(CONFIG_DIR, "last_session.json");
+function projectSlug(): string {
+  return process.cwd().replace(/\//g, "-").replace(/^-/, "");
+}
+const PROJECT_DIR = join(CONFIG_DIR, "projects", projectSlug());
+const CONV_DIR = join(PROJECT_DIR, "conversations");
+const AUTOSAVE_FILE = join(PROJECT_DIR, "last_session.json");
 const INPUT_HISTORY_FILE = join(CONFIG_DIR, "input_history.json");
 const INPUT_HISTORY_SIZE = 500;
 
@@ -708,10 +725,76 @@ function saveInputHistory(lines: string[]): void {
   } catch { /* ignore */ }
 }
 
+interface SessionInfo {
+  file: string;
+  preview: string;
+  msgCount: number;
+  date: string;
+  mtime: number;
+}
+
+function listSessions(): SessionInfo[] {
+  const sessions: SessionInfo[] = [];
+
+  // Autosave (last session)
+  try {
+    if (existsSync(AUTOSAVE_FILE)) {
+      const items = JSON.parse(readFileSync(AUTOSAVE_FILE, "utf-8")) as InputItem[];
+      if (Array.isArray(items) && items.length > 0) {
+        const stat = statSync(AUTOSAVE_FILE);
+        sessions.push(sessionInfoFrom(AUTOSAVE_FILE, items, stat.mtimeMs));
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Saved conversations
+  try {
+    if (existsSync(CONV_DIR)) {
+      const files = readdirSync(CONV_DIR).filter((f) => f.endsWith(".json"));
+      for (const f of files) {
+        const fullPath = join(CONV_DIR, f);
+        try {
+          const items = JSON.parse(readFileSync(fullPath, "utf-8")) as InputItem[];
+          if (Array.isArray(items) && items.length > 0) {
+            const stat = statSync(fullPath);
+            sessions.push(sessionInfoFrom(fullPath, items, stat.mtimeMs));
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  } catch { /* ignore */ }
+
+  sessions.sort((a, b) => b.mtime - a.mtime);
+
+  // Deduplicate: if autosave matches a saved conversation's first message, keep only the newest
+  const seen = new Set<string>();
+  return sessions.filter((s) => {
+    if (seen.has(s.preview)) return false;
+    seen.add(s.preview);
+    return true;
+  }).slice(0, 9);
+}
+
+function sessionInfoFrom(file: string, items: InputItem[], mtimeMs: number): SessionInfo {
+  const userMsgs = items.filter((m) => m.type === "message" && m.role === "user");
+  const lastMsg = userMsgs[userMsgs.length - 1];
+  const preview = lastMsg && lastMsg.type === "message" ? lastMsg.content.slice(0, 60).replace(/\n/g, " ") : "…";
+  const date = new Date(mtimeMs).toLocaleDateString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return { file, preview, msgCount: userMsgs.length, date, mtime: mtimeMs };
+}
+
+function loadSessionFile(path: string): InputItem[] {
+  try {
+    return JSON.parse(readFileSync(path, "utf-8")) as InputItem[];
+  } catch {
+    return [];
+  }
+}
+
 function autoSave(history: InputItem[]): void {
   try {
     if (history.length === 0) return;
-    mkdirSync(CONFIG_DIR, { recursive: true });
+    mkdirSync(PROJECT_DIR, { recursive: true });
     writeFileSync(AUTOSAVE_FILE, JSON.stringify(history, null, 2), "utf-8");
   } catch { /* ignore */ }
 }
