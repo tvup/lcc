@@ -128,43 +128,7 @@ export class LibreChatClient {
   }
 
   async listLLMModels(): Promise<string[]> {
-    const rootUrl = this.baseUrl.replace(/\/api\/agents\/v1$/, "");
-    const all: string[] = [];
-    const endpoints = [`${rootUrl}/api/models`, `${this.baseUrl}/models`];
-    for (const url of endpoints) {
-      try {
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${this.apiKey}` },
-        });
-        if (!res.ok) continue;
-        const data = (await res.json()) as unknown;
-        this.extractModelIds(data, all);
-        if (all.length > 0) break;
-      } catch { /* try next */ }
-    }
-    return [...new Set(all)].filter((id) => !this.knownAgents.has(id)).sort();
-  }
-
-  private extractModelIds(data: unknown, out: string[]): void {
-    if (Array.isArray(data)) {
-      for (const item of data) {
-        if (typeof item === "string") out.push(item);
-        else if (item && typeof item === "object") {
-          const obj = item as Record<string, unknown>;
-          if (typeof obj["id"] === "string") out.push(obj["id"]);
-          if (typeof obj["model"] === "string") out.push(obj["model"]);
-        }
-      }
-    } else if (data && typeof data === "object") {
-      const obj = data as Record<string, unknown>;
-      if (Array.isArray(obj["data"])) {
-        this.extractModelIds(obj["data"], out);
-      } else {
-        for (const val of Object.values(obj)) {
-          if (Array.isArray(val)) this.extractModelIds(val, out);
-        }
-      }
-    }
+    return [];
   }
 
   async send(
