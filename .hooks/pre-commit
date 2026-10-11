@@ -1,0 +1,9 @@
+#!/bin/sh
+# Auto-bump patch version when committing real changes (not just version bumps)
+
+# Skip if this is already a version bump commit
+STAGED=$(git diff --cached --name-only)
+if echo "$STAGED" | grep -qvE '^(package\.json|package-lock\.json)$'; then
+  npm version patch --no-git-tag-version > /dev/null 2>&1
+  git add package.json package-lock.json
+fi
