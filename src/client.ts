@@ -127,6 +127,24 @@ export class LibreChatClient {
     return data.data;
   }
 
+  async listLLMModels(): Promise<string[]> {
+    const rootUrl = this.baseUrl.replace(/\/api\/agents\/v1$/, "");
+    try {
+      const res = await fetch(`${rootUrl}/api/models`, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      });
+      if (!res.ok) return [];
+      const data = (await res.json()) as Record<string, string[]>;
+      const all: string[] = [];
+      for (const models of Object.values(data)) {
+        if (Array.isArray(models)) all.push(...models);
+      }
+      return [...new Set(all)].sort();
+    } catch {
+      return [];
+    }
+  }
+
   async send(
     history: InputItem[],
     callbacks: StreamCallbacks,

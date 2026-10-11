@@ -691,19 +691,36 @@ async function showModels(
 ): Promise<void> {
   console.log(chalk.dim(`  ${t("repl.fetching_models")}`));
   try {
-    const models = await client.listModels();
-    setCached(models.map((m) => m.id));
-    if (models.length === 0) {
+    const [agents, llmModels] = await Promise.all([
+      client.listModels(),
+      client.listLLMModels(),
+    ]);
+    const allIds = [...agents.map((m) => m.id), ...llmModels];
+    setCached(allIds);
+
+    if (agents.length === 0 && llmModels.length === 0) {
       console.log(chalk.yellow(`  ${t("repl.no_models")}`));
-    } else {
-      console.log(chalk.dim(`  ${t("repl.agents_header")}`));
-      for (const m of models) {
+      return;
+    }
+
+    if (agents.length > 0) {
+      console.log(chalk.dim(`\n  ${t("repl.agents_header")}`));
+      for (const m of agents) {
         const label = m.name ? `${m.name} (${m.id})` : m.id;
         const active = m.id === client.getAgent() ? chalk.green(` ${t("repl.active")}`) : "";
         console.log(`    ${label}${active}`);
       }
-      console.log(chalk.dim(`\n  ${t("repl.model_tip")}`));
     }
+
+    if (llmModels.length > 0) {
+      console.log(chalk.dim(`\n  ${t("repl.models_header")}`));
+      for (const id of llmModels) {
+        const active = id === client.getAgent() ? chalk.green(` ${t("repl.active")}`) : "";
+        console.log(`    ${id}${active}`);
+      }
+    }
+
+    console.log(chalk.dim(`\n  ${t("repl.model_tip")}`));
   } catch (err) {
     console.log(chalk.red(`  ${t("repl.error", err instanceof Error ? err.message : String(err))}`));
   }
