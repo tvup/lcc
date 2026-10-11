@@ -317,7 +317,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     : "";
   const instructionFiles = ["AGENTS.md", "CLAUDE.md"].filter((f) => existsSync(join(process.cwd(), f)));
   const instrLine = instructionFiles.length > 0
-    ? chalk.dim(`   ${t("repl.instructions_loaded", instructionFiles.join(", "))}`)
+    ? `   ${t("repl.instructions_loaded", instructionFiles.join(", "))}`
     : "";
   const infoLines = [mcpLine, instrLine].filter(Boolean);
   console.log(
