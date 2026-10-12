@@ -155,16 +155,9 @@ export class LibreChatClient {
     let tools: ToolDef[] = [...builtinTools, ...activeMcpTools];
     let roundTrips = 0;
 
-    const MAX_TOOL_ROUNDS = 15;
-
     // eslint-disable-next-line no-constant-condition
     while (true) {
       if (signal?.aborted) return;
-
-      if (roundTrips >= MAX_TOOL_ROUNDS) {
-        callbacks.onError(new Error(t("client.max_rounds")));
-        return;
-      }
 
       if (roundTrips > 0) {
         await new Promise((r) => setTimeout(r, 3000));
