@@ -1,6 +1,6 @@
 ---
 name: laravel
-description: Laravel framework context and conventions
+description: Behavioral rules for working in Laravel projects
 detect:
   file: composer.json
   contains: laravel/framework
@@ -8,35 +8,32 @@ detect:
 
 Du arbejder i et Laravel-projekt.
 
-Struktur:
-- app/Models/ — Eloquent-modeller
-- app/Http/Controllers/ — Controllere
-- app/Http/Middleware/ — Middleware
-- app/Services/ — Service-klasser
-- app/Providers/ — Service providers
-- routes/web.php, routes/api.php — Routes
-- resources/views/ — Blade-templates
-- database/migrations/ — Migrationer
-- database/seeders/ — Seeders
-- config/ — Konfigurationsfiler
-- tests/Feature/, tests/Unit/ — Tests
+## Før du ændrer noget
 
-Konventioner:
-- Brug `php artisan` til scaffolding: make:model, make:controller, make:migration osv.
-- Eloquent-relationer defineres i model-klasser (hasMany, belongsTo, etc.)
-- Form requests til validering: app/Http/Requests/
-- Policies til authorization: app/Policies/
-- Events og listeners i app/Events/ og app/Listeners/
-- Jobs i app/Jobs/ — dispatch via dispatch() helper
-- Brug config() helper i stedet for env() udenfor config-filer
-- Blade-templates: @extends, @section, @yield, @include, @component
-- Eloquent scopes for genbrugelige queries
-- Resource controllers med --resource flag
-- API resources i app/Http/Resources/ for JSON-transformering
+Læs disse filer for at forstå projektet:
+- `composer.json` — hvilke pakker er installeret (Livewire? Inertia? Filament? Sanctum? Spatie?)
+- `routes/web.php` og `routes/api.php` — routing-struktur
+- `config/app.php` — providers og aliases
+- `.env` — miljøkonfiguration (QUEUE_CONNECTION, DB_CONNECTION, etc.)
 
-Vigtige kommandoer:
-- php artisan migrate — kør migrationer
-- php artisan tinker — interaktiv REPL
-- php artisan route:list — vis alle routes
-- php artisan queue:work — start queue worker
-- composer test — kør tests (alias for php artisan test)
+Tjek om projektet bruger Laravel Sail: kig efter `laravel/sail` i `composer.json`, eller `laravel.test` service i `docker-compose.yml` eller `compose.yml`. Hvis Sail bruges, præfiks ALLE kommandoer med `./vendor/bin/sail` i stedet for direkte `php`/`composer`/`node` — f.eks. `./vendor/bin/sail artisan migrate` i stedet for `php artisan migrate`.
+
+Kør `php artisan route:list --json` (eller via Sail) for at forstå API-strukturen før du rører routes.
+
+## Regler
+
+- Opret ALDRIG en migration der ændrer en eksisterende migrations-fil. Lav altid en NY migration. Kør `php artisan migrate` efter oprettelse for at verificere.
+- Brug ALDRIG `env()` udenfor config-filer — brug `config()` helper.
+- Brug aldrig `DB::raw()` med bruger-input uden bindings.
+- Tilføj altid `$fillable` eller `$guarded` på Eloquent-modeller.
+- Tjek om projektet bruger Pest eller PHPUnit inden du skriver tests. Brug `RefreshDatabase` trait.
+
+## Ved fejl
+
+- Tjek `storage/logs/laravel.log` FØRST.
+- Kør `php artisan config:clear && php artisan cache:clear && php artisan route:clear` hvis konfigurationsændringer ikke slår igennem.
+- Tjek `QUEUE_CONNECTION` i `.env` — er det `sync`, kører jobs ikke asynkront.
+
+## Testing
+
+Kør `php artisan test --filter=TestName` efter ændringer for at verificere.
