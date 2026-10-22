@@ -101,6 +101,7 @@ const da: Record<string, string> = {
   "cmd.load": "Indlæs gemt samtale",
   "cmd.tools": "Slå tools til/fra",
   "cmd.mcp": "Vis MCP-servere, /mcp <navn> slår til/fra",
+  "cmd.addons": "Vis installerede addons og deres status",
   "cmd.update": "Opdater og genstart (git pull + build)",
   "cmd.restart": "Genstart lcc (genindlæser config og MCP-servere)",
   "cmd.voice": "Tale-til-tekst: /voice deepgram | whisper | off | sprog <kode> | nøgle <deepgram|whisper>",
@@ -171,6 +172,8 @@ const da: Record<string, string> = {
   "repl.skill_source_user": "bruger",
   "repl.instructions_loaded": "📋 {0}",
   "repl.addons_active": "🧩 Addons: {0}",
+  "repl.no_addons": "Ingen addons fundet. Opret ~/.config/lcc/addons/<navn>.md",
+  "repl.addons_hint": "✓ = aktiv i dette projekt · Addons: .lcc/addons/ (projekt) > ~/.config/lcc/addons/ (bruger) > builtin",
 
   // Error formatting
   "err.connection": "Kan ikke forbinde til serveren. Tjek LIBRECHAT_URL.",
@@ -322,6 +325,7 @@ const en: Record<string, string> = {
   "cmd.load": "Load saved conversation",
   "cmd.tools": "Toggle tools on/off",
   "cmd.mcp": "Show MCP servers, /mcp <name> toggles on/off",
+  "cmd.addons": "Show installed addons and their status",
   "cmd.update": "Update and restart (git pull + build)",
   "cmd.restart": "Restart lcc (reloads config and MCP servers)",
   "cmd.voice": "Speech-to-text: /voice deepgram | whisper | off | language <code> | key <deepgram|whisper>",
@@ -392,6 +396,8 @@ const en: Record<string, string> = {
   "repl.skill_source_user": "user",
   "repl.instructions_loaded": "📋 {0}",
   "repl.addons_active": "🧩 Addons: {0}",
+  "repl.no_addons": "No addons found. Create ~/.config/lcc/addons/<name>.md",
+  "repl.addons_hint": "✓ = active in this project · Addons: .lcc/addons/ (project) > ~/.config/lcc/addons/ (user) > builtin",
 
   // Error formatting
   "err.connection": "Cannot connect to the server. Check LIBRECHAT_URL.",

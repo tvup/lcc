@@ -10,6 +10,7 @@ import { loadConfig, saveConfig, CONFIG_DIR } from "./config.js";
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
 import { loadSkills, findSkill, renderSkill, type Skill } from "./skills.js";
+import { loadAddons, detectAddons } from "./addons.js";
 import { Spinner } from "./spinner.js";
 import { t, setLocale, getLocale, confirmYes, confirmHint } from "./i18n.js";
 import {
@@ -130,6 +131,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     { cmd: "/load", desc: t("cmd.load") },
     { cmd: "/tools", desc: t("cmd.tools") },
     { cmd: "/mcp", desc: t("cmd.mcp") },
+    { cmd: "/addons", desc: t("cmd.addons") },
     { cmd: "/update", desc: t("cmd.update") },
     { cmd: "/restart", desc: t("cmd.restart") },
     { cmd: "/voice", desc: t("cmd.voice") },
@@ -528,6 +530,27 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
           }
           console.log("");
         }
+      }
+      continue;
+    }
+
+    if (trimmed === "/addons") {
+      const allAddons = loadAddons();
+      const active = detectAddons(allAddons, process.cwd());
+      const activeNames = new Set(active.map((a) => a.name));
+      if (allAddons.length === 0) {
+        console.log(chalk.dim(`  ${t("repl.no_addons")}`));
+      } else {
+        console.log("");
+        for (const a of allAddons) {
+          const isActive = activeNames.has(a.name);
+          const icon = isActive ? chalk.green("✓") : chalk.dim("○");
+          const sourceLabel = a.source === "project" ? t("repl.skill_source_project") : a.source === "user" ? t("repl.skill_source_user") : "builtin";
+          const desc = a.description ? chalk.dim(` — ${a.description}`) : "";
+          const detect = chalk.dim(` [${a.detect.file}${a.detect.contains ? ` ⊃ ${a.detect.contains}` : ""}]`);
+          console.log(`  ${icon} ${a.name}${desc} ${chalk.dim(`(${sourceLabel})`)}${detect}`);
+        }
+        console.log(chalk.dim(`\n  ${t("repl.addons_hint")}`));
       }
       continue;
     }
