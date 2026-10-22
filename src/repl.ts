@@ -863,6 +863,9 @@ async function doConfig(
     };
   }
 
+  let cachedAgents: Array<{ id: string; name?: string }> = [];
+  try { cachedAgents = await client.listModels(); } catch { /* ignore */ }
+
   const mask = (s: string) => s ? s.slice(0, 3) + "***" + s.slice(-3) : "";
   const langName = (code: string) => code.startsWith("en") ? t("config.lang_en") : t("config.lang_da");
   const envHint = (envVar: string) => process.env[envVar] ? chalk.yellow(` (${t("config.env_override")})`) : "";
@@ -876,7 +879,10 @@ async function doConfig(
     console.log(`\n  ${chalk.bold(t("config.header"))}\n`);
     row(1, t("config.url"), cfg.url || t("config.not_set"), envHint("LIBRECHAT_URL"));
     row(2, t("config.apikey"), cfg.apiKey ? mask(cfg.apiKey) : t("config.not_set"), envHint("LIBRECHAT_API_KEY"));
-    row(3, t("config.advisor"), cfg.advisorModel || t("config.not_set"));
+    const advisorLabel = cfg.advisorModel
+      ? (cachedAgents.find((a) => a.id === cfg.advisorModel)?.name ?? cfg.advisorModel)
+      : t("config.not_set");
+    row(3, t("config.advisor"), advisorLabel);
     row(4, t("config.language"), langName(cfg.language));
     row(5, t("config.voice_provider"), providerName(voice.provider));
     row(6, t("config.voice_language"), voice.language);
@@ -902,8 +908,23 @@ async function doConfig(
           break;
         }
         case "3": {
-          const val = (await rl.question(chalk.dim(`  ${t("config.advisor")} [${cfg.advisorModel || t("config.not_set")}]: `))).trim();
-          if (val) cfg.advisorModel = val;
+          if (cachedAgents.length > 0) {
+            console.log(`\n  ${t("config.advisor")}:`);
+            for (let i = 0; i < cachedAgents.length; i++) {
+              const a = cachedAgents[i]!;
+              const label = a.name ? `${a.name} (${a.id})` : a.id;
+              const active = a.id === cfg.advisorModel ? chalk.green(" ●") : "";
+              console.log(`  ${chalk.cyan(`${i + 1}.`)} ${label}${active}`);
+            }
+            console.log("");
+            const pick = (await rl.question(chalk.green(`  ${t("config.select", cachedAgents.length)} `))).trim();
+            const idx = parseInt(pick, 10) - 1;
+            const picked = cachedAgents[idx];
+            if (picked) cfg.advisorModel = picked.id;
+          } else {
+            const val = (await rl.question(chalk.dim(`  ${t("config.advisor")} [${cfg.advisorModel || t("config.not_set")}]: `))).trim();
+            if (val) cfg.advisorModel = val;
+          }
           break;
         }
         case "4": {
