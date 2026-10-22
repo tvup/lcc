@@ -847,8 +847,8 @@ async function doConfig(
     cfg = {
       url: loaded.url,
       apiKey: loaded.apiKey,
-      agentId: loaded.agentId ?? client.getAgent(),
-      advisorModel: loaded.advisorModel ?? client.getAdvisorModel() ?? "",
+      agentId: client.getAgent(),
+      advisorModel: client.getAdvisorModel() ?? loaded.advisorModel ?? "",
       language: loaded.language ?? getLocale(),
     };
   } catch {
