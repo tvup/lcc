@@ -841,13 +841,14 @@ async function doConfig(
   voiceSettings: VoiceSettings,
 ): Promise<VoiceSettings> {
   const voice = { ...voiceSettings };
-  let cfg: { url: string; apiKey: string; agentId: string; language: string };
+  let cfg: { url: string; apiKey: string; agentId: string; advisorModel: string; language: string };
   try {
     const loaded = loadConfig();
     cfg = {
       url: loaded.url,
       apiKey: loaded.apiKey,
       agentId: loaded.agentId ?? client.getAgent(),
+      advisorModel: loaded.advisorModel ?? client.getAdvisorModel() ?? "",
       language: loaded.language ?? getLocale(),
     };
   } catch {
@@ -855,6 +856,7 @@ async function doConfig(
       url: process.env["LIBRECHAT_URL"] ?? "",
       apiKey: process.env["LIBRECHAT_API_KEY"] ?? "",
       agentId: client.getAgent(),
+      advisorModel: client.getAdvisorModel() ?? "",
       language: getLocale(),
     };
   }
@@ -873,18 +875,19 @@ async function doConfig(
     row(1, t("config.url"), cfg.url || t("config.not_set"), envHint("LIBRECHAT_URL"));
     row(2, t("config.apikey"), cfg.apiKey ? mask(cfg.apiKey) : t("config.not_set"), envHint("LIBRECHAT_API_KEY"));
     row(3, t("config.agent_id"), cfg.agentId || t("config.not_set"));
-    row(4, t("config.language"), langName(cfg.language));
-    row(5, t("config.voice_provider"), providerName(voice.provider));
-    row(6, t("config.voice_language"), voice.language);
-    row(7, t("config.deepgram_key"), keyShown(voice.deepgramApiKey), envHint("DEEPGRAM_API_KEY"));
-    row(8, t("config.openai_key"), keyShown(voice.openaiApiKey), envHint("OPENAI_API_KEY"));
+    row(4, t("config.advisor"), cfg.advisorModel || t("config.not_set"));
+    row(5, t("config.language"), langName(cfg.language));
+    row(6, t("config.voice_provider"), providerName(voice.provider));
+    row(7, t("config.voice_language"), voice.language);
+    row(8, t("config.deepgram_key"), keyShown(voice.deepgramApiKey), envHint("DEEPGRAM_API_KEY"));
+    row(9, t("config.openai_key"), keyShown(voice.openaiApiKey), envHint("OPENAI_API_KEY"));
     console.log("");
   };
 
   try {
     while (true) {
       showMenu();
-      const choice = (await rl.question(chalk.green(`  ${t("config.select", 8)} `))).trim();
+      const choice = (await rl.question(chalk.green(`  ${t("config.select", 9)} `))).trim();
       if (!choice) break;
 
       switch (choice) {
@@ -904,6 +907,11 @@ async function doConfig(
           break;
         }
         case "4": {
+          const val = (await rl.question(chalk.dim(`  ${t("config.advisor")} [${cfg.advisorModel || t("config.not_set")}]: `))).trim();
+          if (val) cfg.advisorModel = val;
+          break;
+        }
+        case "5": {
           console.log(`\n  ${t("config.lang_select")}`);
           console.log(`  ${chalk.cyan("1.")} ${t("config.lang_da")}${cfg.language === "da" ? chalk.green(" ●") : ""}`);
           console.log(`  ${chalk.cyan("2.")} ${t("config.lang_en")}${cfg.language.startsWith("en") ? chalk.green(" ●") : ""}`);
@@ -913,7 +921,7 @@ async function doConfig(
           else if (langChoice === "2") { cfg.language = "en"; setLocale("en"); }
           break;
         }
-        case "5": {
+        case "7": {
           const options = ["off", "deepgram", "whisper"] as const;
           console.log(`\n  ${t("config.voice_select")}`);
           options.forEach((p, i) => {
@@ -934,27 +942,33 @@ async function doConfig(
           voice.provider = picked;
           break;
         }
-        case "6": {
+        case "8": {
           const val = (await rl.question(chalk.dim(`  ${t("config.voice_language")} [${voice.language}]: `))).trim();
           if (val) voice.language = val;
           break;
         }
-        case "7": {
-          const val = (await rl.question(chalk.dim(`  ${t("config.deepgram_key")} [${keyShown(voice.deepgramApiKey)}]: `))).trim();
-          if (val) voice.deepgramApiKey = val;
-          break;
-        }
-        case "8": {
-          const val = (await rl.question(chalk.dim(`  ${t("config.openai_key")} [${keyShown(voice.openaiApiKey)}]: `))).trim();
-          if (val) voice.openaiApiKey = val;
+        case "9": {
+          console.log(chalk.dim(`\n  ${t("config.keys_submenu")}`));
+          console.log(`  ${chalk.cyan("1.")} Deepgram  ${chalk.dim(keyShown(voice.deepgramApiKey))}${envHint("DEEPGRAM_API_KEY")}`);
+          console.log(`  ${chalk.cyan("2.")} OpenAI    ${chalk.dim(keyShown(voice.openaiApiKey))}${envHint("OPENAI_API_KEY")}`);
+          console.log("");
+          const keyChoice = (await rl.question(chalk.green(`  ${t("config.select", 2)} `))).trim();
+          if (keyChoice === "1") {
+            const val = (await rl.question(chalk.dim(`  ${t("config.deepgram_key")}: `))).trim();
+            if (val) voice.deepgramApiKey = val;
+          } else if (keyChoice === "2") {
+            const val = (await rl.question(chalk.dim(`  ${t("config.openai_key")}: `))).trim();
+            if (val) voice.openaiApiKey = val;
+          }
           break;
         }
       }
     }
 
-    saveConfig({ url: cfg.url, apiKey: cfg.apiKey, agentId: cfg.agentId || undefined, language: cfg.language });
+    saveConfig({ url: cfg.url, apiKey: cfg.apiKey, agentId: cfg.agentId || undefined, advisorModel: cfg.advisorModel || undefined, language: cfg.language });
     saveVoiceSettings(voice);
     client.setAgent(cfg.agentId);
+    client.setAdvisorModel(cfg.advisorModel || null);
     console.log(chalk.green(`  ${t("config.saved")}`));
     if (voice.provider !== "off" && !findRecorder()) {
       console.log(chalk.yellow(`  ${t("voice.no_recorder", recorderInstallHint())}`));

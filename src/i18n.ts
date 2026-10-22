@@ -44,6 +44,8 @@ const da: Record<string, string> = {
   "config.voice_language": "Tale-sprog",
   "config.deepgram_key": "Deepgram-nøgle",
   "config.openai_key": "OpenAI-nøgle",
+  "config.advisor": "Advisor-model",
+  "config.keys_submenu": "API-nøgler:",
   "config.voice_select": "Vælg tale-motor:",
 
   // Help (index.ts)
@@ -77,6 +79,10 @@ const da: Record<string, string> = {
   "client.mcp_available": "Tilgængelige MCP-tools:",
   "client.mcp_budget": "(Bemærk: Kun de første {0} MCP-tools er aktive. Nævn et tool-navn hvis du har brug for et der ikke er aktivt.)",
   "client.mcp_ready": "De ønskede MCP-tools er nu tilgængelige: {0}. Kald dem nu.",
+  "client.no_advisor": "Ingen advisor-model konfigureret. Sæt en stærkere model i /config.",
+  "client.advisor_prompt": "Du er en senior reviewer. Gennemgå denne samtale og giv råd om tilgangen, fejl du ser, og hvad der bør gøres anderledes. Vær konkret og handlingsorienteret.\n\nSamtale:\n{0}",
+  "client.advisor_error": "Advisor-kald fejlede: {0}",
+  "client.advisor_empty": "Advisor svarede ikke.",
 
   // Context prefix
   "ctx.label": "Kontekst",
@@ -258,6 +264,8 @@ const en: Record<string, string> = {
   "config.voice_language": "Voice language",
   "config.deepgram_key": "Deepgram key",
   "config.openai_key": "OpenAI key",
+  "config.advisor": "Advisor model",
+  "config.keys_submenu": "API keys:",
   "config.voice_select": "Select voice engine:",
 
   // Help (index.ts)
@@ -291,6 +299,10 @@ const en: Record<string, string> = {
   "client.mcp_available": "Available MCP tools:",
   "client.mcp_budget": "(Note: Only the first {0} MCP tools are active. Mention a tool name if you need one that is not active.)",
   "client.mcp_ready": "The requested MCP tools are now available: {0}. Call them now.",
+  "client.no_advisor": "No advisor model configured. Set a stronger model in /config.",
+  "client.advisor_prompt": "You are a senior reviewer. Review this conversation and advise on the approach, any mistakes you see, and what should be done differently. Be specific and actionable.\n\nConversation:\n{0}",
+  "client.advisor_error": "Advisor call failed: {0}",
+  "client.advisor_empty": "Advisor returned no response.",
 
   // Context prefix
   "ctx.label": "Context",

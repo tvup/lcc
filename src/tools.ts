@@ -116,6 +116,17 @@ export const toolDefinitions: ToolDef[] = [
   },
   {
     type: "function",
+    name: "advisor",
+    description:
+      "Consult a stronger model for review, guidance, or a second opinion. Sends the full conversation. Use when stuck, before major decisions, or to verify your approach.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    type: "function",
     name: "list_files",
     description:
       "List files and directories. Only for discovering structure, not reading content.",

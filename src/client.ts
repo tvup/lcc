@@ -79,12 +79,22 @@ export class LibreChatClient {
   private knownAgents: Set<string> = new Set();
   private mcp: McpManager | null = null;
   private toolBudget: number = Infinity;
+  private advisorModel: string | null;
 
   constructor(config: Config, agentId: string) {
     this.baseUrl = `${config.url.replace(/\/+$/, "")}/api/agents/v1`;
     this.apiKey = config.apiKey;
     this.modelId = agentId;
     this._agentMode = this.looksLikeAgent(agentId);
+    this.advisorModel = config.advisorModel ?? null;
+  }
+
+  setAdvisorModel(id: string | null): void {
+    this.advisorModel = id;
+  }
+
+  getAdvisorModel(): string | null {
+    return this.advisorModel;
   }
 
   setAgent(id: string): void {
@@ -244,9 +254,15 @@ export class LibreChatClient {
 
           callbacks.onToolCall(fc.name, args);
 
-          const toolResult = this.mcp?.hasTool(fc.name)
-            ? await this.mcp.callTool(fc.name, args)
-            : executeTool(fc.name, args);
+          let toolResult: { output: string; isError?: boolean };
+          if (fc.name === "advisor") {
+            const advisorResponse = await this.callAdvisor(currentInput);
+            toolResult = { output: advisorResponse };
+          } else if (this.mcp?.hasTool(fc.name)) {
+            toolResult = await this.mcp.callTool(fc.name, args);
+          } else {
+            toolResult = executeTool(fc.name, args);
+          }
           callbacks.onToolResult(fc.name, toolResult.output);
 
           let output = encodeToolOutput(toolResult.output);
@@ -336,6 +352,49 @@ export class LibreChatClient {
         content: t("ctx.understood"),
       },
     ];
+  }
+
+  async callAdvisor(history: InputItem[]): Promise<string> {
+    if (!this.advisorModel) return t("client.no_advisor");
+
+    const input: InputItem[] = [
+      {
+        type: "message",
+        role: "user",
+        content: t("client.advisor_prompt", JSON.stringify(history.filter((h) => h.type === "message").slice(-40))),
+      },
+    ];
+
+    const body: Record<string, unknown> = {
+      model: this.advisorModel,
+      input,
+      stream: false,
+    };
+
+    const res = await fetch(`${this.baseUrl}/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      return t("client.advisor_error", `HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = (await res.json()) as { output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }> };
+    const parts: string[] = [];
+    for (const item of data.output ?? []) {
+      if (item.type === "message" && item.content) {
+        for (const c of item.content) {
+          if (c.type === "output_text" && c.text) parts.push(c.text);
+        }
+      }
+    }
+    return parts.join("\n") || t("client.advisor_empty");
   }
 
   private async callResponsesNoStream(
