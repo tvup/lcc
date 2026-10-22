@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import type { Config } from "./config.js";
 import { toolDefinitions, executeTool, type ToolDef } from "./tools.js";
 import type { McpManager } from "./mcp.js";
+import { loadAddons, detectAddons, type Addon } from "./addons.js";
 import { t } from "./i18n.js";
 
 export type ContentPart =
@@ -80,6 +81,7 @@ export class LibreChatClient {
   private mcp: McpManager | null = null;
   private toolBudget: number = Infinity;
   private advisorModel: string | null;
+  private matchedAddons: Addon[] = [];
 
   constructor(config: Config, agentId: string) {
     this.baseUrl = `${config.url.replace(/\/+$/, "")}/api/agents/v1`;
@@ -95,6 +97,10 @@ export class LibreChatClient {
 
   getAdvisorModel(): string | null {
     return this.advisorModel;
+  }
+
+  getMatchedAddons(): Addon[] {
+    return this.matchedAddons;
   }
 
   setAgent(id: string): void {
@@ -328,6 +334,12 @@ export class LibreChatClient {
           }
         } catch { /* ignore */ }
       }
+    }
+
+    const allAddons = loadAddons();
+    this.matchedAddons = detectAddons(allAddons, cwd);
+    for (const addon of this.matchedAddons) {
+      instructions += `\n\n[Addon: ${addon.name}]\n${addon.body}`;
     }
 
     let mcpInfo = "";

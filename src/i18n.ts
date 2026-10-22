@@ -170,6 +170,7 @@ const da: Record<string, string> = {
   "repl.skill_source_project": "projekt",
   "repl.skill_source_user": "bruger",
   "repl.instructions_loaded": "📋 {0}",
+  "repl.addons_active": "🧩 Addons: {0}",
 
   // Error formatting
   "err.connection": "Kan ikke forbinde til serveren. Tjek LIBRECHAT_URL.",
@@ -390,6 +391,7 @@ const en: Record<string, string> = {
   "repl.skill_source_project": "project",
   "repl.skill_source_user": "user",
   "repl.instructions_loaded": "📋 {0}",
+  "repl.addons_active": "🧩 Addons: {0}",
 
   // Error formatting
   "err.connection": "Cannot connect to the server. Check LIBRECHAT_URL.",
