@@ -1,15 +1,20 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { CONFIG_DIR } from "./config.js";
+
+export type AddonSource = "project" | "user" | "builtin";
 
 export interface Addon {
   name: string;
   description: string;
   body: string;
-  source: "project" | "user";
+  source: AddonSource;
   detect: { file: string; contains?: string };
 }
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const BUILTIN_ADDONS_DIR = join(__dirname, "..", "addons");
 const USER_ADDONS_DIR = join(CONFIG_DIR, "addons");
 
 function projectAddonsDir(): string {
@@ -53,7 +58,7 @@ function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: s
   return { meta, body };
 }
 
-function parseAddonFile(filePath: string, source: "project" | "user"): Addon | null {
+function parseAddonFile(filePath: string, source: AddonSource): Addon | null {
   try {
     const raw = readFileSync(filePath, "utf-8").trim();
     if (!raw) return null;
@@ -104,6 +109,20 @@ export function loadAddons(): Addon[] {
       for (const file of readdirSync(USER_ADDONS_DIR)) {
         if (!file.endsWith(".md")) continue;
         const addon = parseAddonFile(join(USER_ADDONS_DIR, file), "user");
+        if (addon && !seen.has(addon.name)) {
+          addons.push(addon);
+          seen.add(addon.name);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Builtin addons (lowest priority — shipped with lcc)
+  if (existsSync(BUILTIN_ADDONS_DIR)) {
+    try {
+      for (const file of readdirSync(BUILTIN_ADDONS_DIR)) {
+        if (!file.endsWith(".md")) continue;
+        const addon = parseAddonFile(join(BUILTIN_ADDONS_DIR, file), "builtin");
         if (addon && !seen.has(addon.name)) {
           addons.push(addon);
         }
