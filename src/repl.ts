@@ -616,8 +616,9 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                   stdout.write(chalk.dim(`  ← ${name}: ${preview}\n\n`));
                   spinner.start(t("repl.spinner_thinking"));
                 },
-                onDone: (fullText) => {
+                onDone: (fullText, toolItems) => {
                   spinner.stop(); stdout.write(md.flush());
+                  if (toolItems.length > 0) history.push(...toolItems);
                   if (fullText) history.push({ type: "message", role: "assistant", content: fullText });
                   autoSave(history);
                   stdout.write("\n\n");
@@ -700,9 +701,10 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
               stdout.write(chalk.dim(`  ← ${name}: ${preview}\n\n`));
               spinner.start(t("repl.spinner_thinking"));
             },
-            onDone: (fullText) => {
+            onDone: (fullText, toolItems) => {
               spinner.stop();
               stdout.write(md.flush());
+              if (toolItems.length > 0) history.push(...toolItems);
               if (fullText) {
                 history.push({ type: "message", role: "assistant", content: fullText });
               }

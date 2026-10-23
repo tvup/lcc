@@ -34,41 +34,79 @@ export interface StreamCallbacks {
   onDelta: (text: string) => void;
   onToolCall: (name: string, args: Record<string, unknown>) => void;
   onToolResult: (name: string, result: string) => void;
-  onDone: (fullText: string) => void;
+  onDone: (fullText: string, toolItems: InputItem[]) => void;
   onError: (error: Error) => void;
 }
 
 const MAX_TOOL_OUTPUT_CHARS = 12_000;
-// Must stay even: tool items are always pushed as call/output pairs.
-const KEPT_TOOL_ITEMS = 30;
-const FULL_TOOL_ITEMS = 16;
+const COMPRESS_BUDGET_CHARS = 80_000;
 const OLD_OUTPUT_CHARS = 400;
+const RECENT_TOOL_PAIRS = 8;
 
 function encodeToolOutput(output: string): string {
   if (output.length <= MAX_TOOL_OUTPUT_CHARS) return output;
   return output.slice(0, MAX_TOOL_OUTPUT_CHARS) + `\n[...${t("truncated")}]`;
 }
 
+function itemChars(item: InputItem): number {
+  if (item.type === "message") {
+    return typeof item.content === "string" ? item.content.length : JSON.stringify(item.content).length;
+  }
+  if (item.type === "function_call") return item.arguments.length + item.name.length;
+  if (item.type === "function_call_output") return item.output.length;
+  return 0;
+}
+
 function compressInputHistory(input: InputItem[]): InputItem[] {
-  const messages = input.filter(
-    (i): i is Extract<InputItem, { type: "message" }> => i.type === "message",
-  );
-  const toolItems = input.filter((item) => item.type !== "message");
-  const kept = toolItems.slice(-KEPT_TOOL_ITEMS);
+  // Find tool-pair boundaries (call_id groups) from the end
+  const pairEnds: number[] = [];
+  for (let i = input.length - 1; i >= 0; i--) {
+    if (input[i]!.type === "function_call_output") pairEnds.push(i);
+  }
 
-  const compressed = kept.map((item, idx) => {
-    const isRecent = idx >= kept.length - FULL_TOOL_ITEMS;
-    if (isRecent) return item;
+  const recentCallIds = new Set<string>();
+  for (let p = 0; p < Math.min(RECENT_TOOL_PAIRS, pairEnds.length); p++) {
+    const item = input[pairEnds[p]!]!;
+    if (item.type === "function_call_output") recentCallIds.add(item.call_id);
+  }
+
+  let totalChars = 0;
+  const result: InputItem[] = [];
+
+  for (const item of input) {
+    if (item.type === "message") {
+      result.push(item);
+      totalChars += itemChars(item);
+      continue;
+    }
+
     if (item.type === "function_call") {
-      return { ...item, arguments: "{}" };
+      if (recentCallIds.has(item.call_id)) {
+        result.push(item);
+      } else if (totalChars < COMPRESS_BUDGET_CHARS) {
+        result.push(item);
+      }
+      totalChars += itemChars(item);
+      continue;
     }
-    if (item.type === "function_call_output" && item.output.length > OLD_OUTPUT_CHARS) {
-      return { ...item, output: item.output.slice(0, OLD_OUTPUT_CHARS) + `\n[...${t("client.old_result")}]` };
-    }
-    return item;
-  });
 
-  return [...messages, ...compressed];
+    if (item.type === "function_call_output") {
+      if (recentCallIds.has(item.call_id)) {
+        result.push(item);
+        totalChars += itemChars(item);
+      } else if (totalChars < COMPRESS_BUDGET_CHARS) {
+        if (item.output.length > OLD_OUTPUT_CHARS) {
+          result.push({ ...item, output: item.output.slice(0, OLD_OUTPUT_CHARS) + `\n[...${t("client.old_result")}]` });
+        } else {
+          result.push(item);
+        }
+        totalChars += OLD_OUTPUT_CHARS;
+      }
+      continue;
+    }
+  }
+
+  return result;
 }
 
 export class LibreChatClient {
@@ -163,6 +201,7 @@ export class LibreChatClient {
     signal?: AbortSignal,
   ): Promise<void> {
     let fullText = "";
+    const turnToolItems: InputItem[] = [];
     const contextPrefix = this.buildContextPrefix();
     let currentInput: InputItem[] = [...contextPrefix, ...history];
     const builtinTools: ToolDef[] = this.toolsEnabled ? [...toolDefinitions] : [];
@@ -182,9 +221,7 @@ export class LibreChatClient {
 
       try {
         const isFollowUp = roundTrips > 1;
-        const inputToSend = isFollowUp
-          ? compressInputHistory(currentInput)
-          : currentInput;
+        const inputToSend = compressInputHistory(currentInput);
 
         let result: { text: string; functionCalls: StreamedFunctionCall[] };
         try {
@@ -208,6 +245,10 @@ export class LibreChatClient {
           }
         }
         fullText += result.text;
+
+        if (result.text && result.functionCalls.length > 0) {
+          currentInput.push({ type: "message", role: "assistant", content: result.text });
+        }
 
         if (result.functionCalls.length === 0) {
           if (this.mcp && this.toolBudget > 0 && this.toolBudget < allMcpTools.length && result.text) {
@@ -234,7 +275,7 @@ export class LibreChatClient {
               continue;
             }
           }
-          callbacks.onDone(fullText);
+          callbacks.onDone(fullText, turnToolItems);
           return;
         }
 
@@ -277,19 +318,21 @@ export class LibreChatClient {
             output += `\n\n${t("client.tool_hint")}`;
           }
           for (const dup of group) {
-            currentInput.push({
+            const callItem: InputItem = {
               type: "function_call",
               id: dup.id,
               call_id: dup.call_id,
               name: dup.name,
               arguments: dup.arguments,
               status: "completed",
-            });
-            currentInput.push({
+            };
+            const outputItem: InputItem = {
               type: "function_call_output",
               call_id: dup.call_id,
               output,
-            });
+            };
+            currentInput.push(callItem, outputItem);
+            turnToolItems.push(callItem, outputItem);
           }
         }
       } catch (err) {
@@ -720,7 +763,7 @@ export class LibreChatClient {
         }
       }
 
-      callbacks.onDone(fullText);
+      callbacks.onDone(fullText, []);
     } catch (err) {
       if (signal?.aborted) return;
       callbacks.onError(err instanceof Error ? err : new Error(String(err)));
