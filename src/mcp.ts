@@ -91,6 +91,8 @@ export class McpManager {
   private failed: FailedServer[] = [];
   private toolMap = new Map<string, { server: ConnectedServer; originalName: string }>();
   private disabledServers = new Set<string>();
+  private readonly CONNECT_TIMEOUT = 55 * 60 * 1000; // 55 minutter
+  private readonly CALL_TOOL_TIMEOUT = 55 * 60 * 1000; // 55 minutter
 
   private loadDisabledState(): void {
     try {
@@ -135,8 +137,6 @@ export class McpManager {
     const entries = Object.entries(config.mcpServers);
     if (entries.length === 0) return;
 
-    const CONNECT_TIMEOUT = 55 * 60 * 1000; // 55 minutter
-    const CALL_TOOL_TIMEOUT = 55 * 60 * 1000; // 55 minutter
     const defaultEnv = getDefaultEnvironment();
 
     const results = await Promise.allSettled(
@@ -162,9 +162,9 @@ export class McpManager {
         const client = new Client({ name: "lcc", version: "1.0.0" });
 
         try {
-          await withTimeout(client.connect(transport), CONNECT_TIMEOUT, t("mcp.timeout.startup"));
+          await withTimeout(client.connect(transport), this.CONNECT_TIMEOUT, t("mcp.timeout.startup"));
 
-          const { tools } = await withTimeout(client.listTools(), CONNECT_TIMEOUT, t("mcp.timeout.list"));
+          const { tools } = await withTimeout(client.listTools(), this.CONNECT_TIMEOUT, t("mcp.timeout.list"));
 
           return {
             name,
@@ -244,7 +244,7 @@ export class McpManager {
           name: entry.originalName,
           arguments: args,
         }),
-        CALL_TOOL_TIMEOUT,
+        this.CALL_TOOL_TIMEOUT,
         "MCP call timeout",
       );
 
