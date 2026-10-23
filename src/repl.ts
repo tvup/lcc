@@ -651,6 +651,11 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                   if (fullText) history.push({ type: "message", role: "assistant", content: fullText });
                   autoSave(history);
                   stdout.write("\n\n");
+                  // Show alert if configured
+                  const cfg = loadConfig();
+                  if (cfg.showPromptFinishAlert) {
+                    stdout.write(`${t("repl.prompt_finish_alert")}\n`);
+                  }
                   abortController = null;
                   resolve();
                 },

@@ -10,6 +10,7 @@ export interface Config {
   advisorModel?: string;
   language?: string;
   plugins?: Record<string, { path?: string; version?: string; installed: boolean }>;
+  showPromptFinishAlert?: boolean;
 }
 
 export const CONFIG_DIR = join(homedir(), ".config", "lcc");
@@ -30,7 +31,7 @@ export function loadConfig(): Config {
   if (language && !process.env["LCC_LANG"]) setLocale(language);
 
   if (url && apiKey) {
-    return { url, apiKey, agentId, advisorModel: fileConfig.advisorModel, language, plugins: fileConfig.plugins };
+    return { url, apiKey, agentId, advisorModel: fileConfig.advisorModel, language, plugins: fileConfig.plugins, showPromptFinishAlert: fileConfig.showPromptFinishAlert };
   }
 
   if (fileConfig.url && fileConfig.apiKey) {
