@@ -30,7 +30,7 @@ export function loadConfig(): Config {
   if (language && !process.env["LCC_LANG"]) setLocale(language);
 
   if (url && apiKey) {
-    return { url, apiKey, agentId, advisorModel: fileConfig.advisorModel, language };
+    return { url, apiKey, agentId, advisorModel: fileConfig.advisorModel, language, plugins: fileConfig.plugins };
   }
 
   if (fileConfig.url && fileConfig.apiKey) {
@@ -40,6 +40,7 @@ export function loadConfig(): Config {
       agentId: agentId ?? fileConfig.agentId,
       advisorModel: fileConfig.advisorModel,
       language,
+      plugins: fileConfig.plugins,
     };
   }
 
