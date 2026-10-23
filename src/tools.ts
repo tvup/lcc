@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { t } from "./i18n.js";
 
@@ -169,29 +169,38 @@ export function executeTool(
   }
 }
 
+let sailCache: { cwd: string; prefix: string } | null = null;
+
 function detectSailPrefix(): string {
   const cwd = process.cwd();
+  if (sailCache?.cwd === cwd) return sailCache.prefix;
+
+  let prefix = "";
   try {
     const composer = readFileSync(resolve(cwd, "composer.json"), "utf-8");
-    if (!composer.includes("laravel/sail")) return "";
-  } catch {
-    return "";
-  }
-  for (const f of ["docker-compose.yml", "compose.yml"]) {
-    try {
-      const content = readFileSync(resolve(cwd, f), "utf-8");
-      if (content.includes("laravel.test")) return "./vendor/bin/sail ";
-    } catch { /* ignore */ }
-  }
-  return "";
+    if (composer.includes("laravel/sail")) {
+      for (const f of ["docker-compose.yml", "compose.yml"]) {
+        try {
+          const content = readFileSync(resolve(cwd, f), "utf-8");
+          if (content.includes("laravel.test")) { prefix = "./vendor/bin/sail"; break; }
+        } catch { /* ignore */ }
+      }
+    }
+  } catch { /* not a laravel project */ }
+
+  sailCache = { cwd, prefix };
+  return prefix;
 }
 
 function phpLint(filePath: string): string | null {
   if (!filePath.endsWith(".php")) return null;
   try {
-    const prefix = detectSailPrefix();
-    const cmd = `${prefix}php -l ${JSON.stringify(filePath)}`;
-    execSync(cmd, { encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"] });
+    const sail = detectSailPrefix();
+    if (sail) {
+      execFileSync(sail, ["php", "-l", filePath], { encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"] });
+    } else {
+      execFileSync("php", ["-l", filePath], { encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"] });
+    }
     return null;
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string };
@@ -344,15 +353,30 @@ function execBash(args: Record<string, unknown>): ToolResult {
   }
 }
 
+let hasRg: boolean | null = null;
+function rgAvailable(): boolean {
+  if (hasRg !== null) return hasRg;
+  try { execSync("which rg", { stdio: "pipe" }); hasRg = true; } catch { hasRg = false; }
+  return hasRg;
+}
+
 function execGrep(args: Record<string, unknown>): ToolResult {
   const pattern = String(args["pattern"] ?? "");
   if (!pattern) return { output: t("tool.error.pattern_required"), isError: true };
 
   const searchPath = String(args["path"] ?? ".");
-  const include = args["include"] ? `--include=${JSON.stringify(String(args["include"]))}` : "";
+  const includeGlob = args["include"] ? String(args["include"]) : "";
 
   try {
-    const cmd = `grep -rn ${include} -E ${JSON.stringify(pattern)} ${JSON.stringify(searchPath)} 2>/dev/null | head -100`;
+    let cmd: string;
+    if (rgAvailable()) {
+      const includeArg = includeGlob ? `-g ${JSON.stringify(includeGlob)}` : "";
+      cmd = `rg -n --no-heading ${includeArg} -- ${JSON.stringify(pattern)} ${JSON.stringify(searchPath)} 2>&1 | head -100`;
+    } else {
+      const defaultExcludes = "--exclude-dir=vendor --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=storage --exclude-dir=.next --exclude-dir=dist";
+      const includeArg = includeGlob ? `--include=${JSON.stringify(includeGlob)}` : "";
+      cmd = `grep -rn ${defaultExcludes} ${includeArg} -E -- ${JSON.stringify(pattern)} ${JSON.stringify(searchPath)} 2>&1 | head -100`;
+    }
     const output = execSync(cmd, {
       encoding: "utf-8",
       timeout: 15_000,
@@ -360,7 +384,11 @@ function execGrep(args: Record<string, unknown>): ToolResult {
     });
     if (!output.trim()) return { output: t("tool.no_results") };
     return truncate(output);
-  } catch {
+  } catch (err) {
+    const execErr = err as { stdout?: string; stderr?: string; status?: number };
+    const errOutput = [execErr.stderr, execErr.stdout].filter(Boolean).join("\n").trim();
+    if (execErr.status === 1 && !errOutput) return { output: t("tool.no_results") };
+    if (errOutput) return { output: errOutput, isError: true };
     return { output: t("tool.no_results") };
   }
 }

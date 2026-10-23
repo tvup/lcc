@@ -29,6 +29,29 @@ const PKG = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"]);
 
+const DESTRUCTIVE_PATTERNS = [
+  /\bgit\s+push\b.*(-f|--force)/,
+  /\bgit\s+reset\s+--hard\b/,
+  /\brm\s+-r/,
+  /\bmigrate:fresh\b/,
+  /\bDROP\s+(TABLE|DATABASE)\b/i,
+  /\bgit\s+clean\s+-[a-z]*f/,
+];
+
+function isDestructiveCommand(command: string): boolean {
+  return DESTRUCTIVE_PATTERNS.some(p => p.test(command));
+}
+
+const STILL_BROKEN_PATTERNS = [
+  /\b(stadig|still)\b.*\b(ikke|not|broken|fejl|error)\b/i,
+  /\b(virker ikke|doesn't work|does not work|same error|samme fejl)\b/i,
+  /\b(igen|again)\b.*\b(fejl|error|problem)\b/i,
+];
+
+function looksLikeStillBroken(text: string): boolean {
+  return STILL_BROKEN_PATTERNS.some(p => p.test(text));
+}
+
 function isImageFile(path: string): boolean {
   return IMAGE_EXTS.has(extname(path).toLowerCase());
 }
@@ -646,6 +669,10 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     const userItem = trimmed.includes("@") ? buildMultiPartMessage(trimmed) : { type: "message" as const, role: "user" as const, content: trimmed };
     history.push(userItem);
 
+    if (looksLikeStillBroken(trimmed)) {
+      history.push({ type: "message" as const, role: "user" as const, content: t("client.still_broken_hint") });
+    }
+
     if (userItem.type === "message" && Array.isArray(userItem.content)) {
       for (const part of userItem.content) {
         if (part.type === "input_image") {
@@ -700,6 +727,20 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                 : result;
               stdout.write(chalk.dim(`  ← ${name}: ${preview}\n\n`));
               spinner.start(t("repl.spinner_thinking"));
+            },
+            onBeforeExec: async (name, args) => {
+              if (name === "bash") {
+                const command = String(args["command"] ?? "");
+                if (isDestructiveCommand(command)) {
+                  spinner.stop();
+                  stdout.write(md.flush());
+                  try {
+                    const answer = await rl.question(chalk.yellow(`\n  ${t("client.confirm_destructive", command)} ${confirmHint()} `));
+                    return confirmYes(answer);
+                  } catch { return false; }
+                }
+              }
+              return true;
             },
             onDone: (fullText, toolItems) => {
               spinner.stop();

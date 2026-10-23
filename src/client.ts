@@ -36,6 +36,7 @@ export interface StreamCallbacks {
   onToolResult: (name: string, result: string) => void;
   onDone: (fullText: string, toolItems: InputItem[]) => void;
   onError: (error: Error) => void;
+  onBeforeExec?: (name: string, args: Record<string, unknown>) => Promise<boolean>;
 }
 
 const MAX_TOOL_OUTPUT_CHARS = 12_000;
@@ -70,50 +71,74 @@ function looksLikeUnfinished(text: string): boolean {
   return UNFINISHED_PATTERNS.some((p) => p.test(last500));
 }
 
+function detectUnverifiedClaims(text: string, toolItems: InputItem[]): string | null {
+  const claims: Array<{ pattern: RegExp; bashPattern: RegExp; label: string }> = [
+    { pattern: /\b(committed|commit(?:tet)?|har committet)\b/i, bashPattern: /git\s+(add|commit)\b/, label: "commit" },
+    { pattern: /\b(push(?:et|ed)?|har pushet)\b/i, bashPattern: /git\s+push\b/, label: "push" },
+    { pattern: /\b(deploy(?:et|ed)?|har deployet)\b/i, bashPattern: /deploy/, label: "deploy" },
+  ];
+
+  const bashCalls = toolItems
+    .filter((i): i is Extract<InputItem, { type: "function_call" }> => i.type === "function_call" && i.name === "bash")
+    .map(i => { try { return (JSON.parse(i.arguments) as { command?: string }).command ?? ""; } catch { return ""; } });
+
+  for (const claim of claims) {
+    if (claim.pattern.test(text)) {
+      if (!bashCalls.some(cmd => claim.bashPattern.test(cmd))) {
+        return t("client.claim_guard", claim.label);
+      }
+    }
+  }
+  return null;
+}
+
 function compressInputHistory(input: InputItem[]): InputItem[] {
-  // Find tool-pair boundaries (call_id groups) from the end
-  const pairEnds: number[] = [];
+  // Find the most recent N tool output call_ids to protect
+  const outputIndices: number[] = [];
   for (let i = input.length - 1; i >= 0; i--) {
-    if (input[i]!.type === "function_call_output") pairEnds.push(i);
+    if (input[i]!.type === "function_call_output") outputIndices.push(i);
   }
 
   const recentCallIds = new Set<string>();
-  for (let p = 0; p < Math.min(RECENT_TOOL_PAIRS, pairEnds.length); p++) {
-    const item = input[pairEnds[p]!]!;
+  for (let p = 0; p < Math.min(RECENT_TOOL_PAIRS, outputIndices.length); p++) {
+    const item = input[outputIndices[p]!]!;
     if (item.type === "function_call_output") recentCallIds.add(item.call_id);
   }
 
-  let totalChars = 0;
-  const result: InputItem[] = [];
+  // First pass: decide which non-recent call_ids fit in budget (pair as unit)
+  const keptCallIds = new Set(recentCallIds);
+  let toolChars = 0;
 
+  for (const item of input) {
+    if (item.type !== "function_call" || recentCallIds.has(item.call_id)) continue;
+    const callChars = itemChars(item);
+    const output = input.find(i => i.type === "function_call_output" && (i as { call_id: string }).call_id === item.call_id);
+    const outputChars = output ? Math.min(itemChars(output), OLD_OUTPUT_CHARS) : 0;
+    if (toolChars + callChars + outputChars < COMPRESS_BUDGET_CHARS) {
+      keptCallIds.add(item.call_id);
+      toolChars += callChars + outputChars;
+    }
+  }
+
+  // Second pass: build result — only include tool items for kept call_ids
+  const result: InputItem[] = [];
   for (const item of input) {
     if (item.type === "message") {
       result.push(item);
-      totalChars += itemChars(item);
       continue;
     }
-
     if (item.type === "function_call") {
-      if (recentCallIds.has(item.call_id)) {
-        result.push(item);
-      } else if (totalChars < COMPRESS_BUDGET_CHARS) {
-        result.push(item);
-      }
-      totalChars += itemChars(item);
+      if (keptCallIds.has(item.call_id)) result.push(item);
       continue;
     }
-
     if (item.type === "function_call_output") {
+      if (!keptCallIds.has(item.call_id)) continue;
       if (recentCallIds.has(item.call_id)) {
         result.push(item);
-        totalChars += itemChars(item);
-      } else if (totalChars < COMPRESS_BUDGET_CHARS) {
-        if (item.output.length > OLD_OUTPUT_CHARS) {
-          result.push({ ...item, output: item.output.slice(0, OLD_OUTPUT_CHARS) + `\n[...${t("client.old_result")}]` });
-        } else {
-          result.push(item);
-        }
-        totalChars += OLD_OUTPUT_CHARS;
+      } else if (item.output.length > OLD_OUTPUT_CHARS) {
+        result.push({ ...item, output: item.output.slice(0, OLD_OUTPUT_CHARS) + `\n[...${t("client.old_result")}]` });
+      } else {
+        result.push(item);
       }
       continue;
     }
@@ -228,35 +253,31 @@ export class LibreChatClient {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       if (signal?.aborted) return;
-
-      if (roundTrips > 0) {
-        await new Promise((r) => setTimeout(r, 3000));
-      }
       roundTrips++;
 
       try {
-        const isFollowUp = roundTrips > 1;
         const inputToSend = compressInputHistory(currentInput);
 
         let result: { text: string; functionCalls: StreamedFunctionCall[] };
         try {
-          result = isFollowUp
-            ? await this.callResponsesNoStream(inputToSend, tools, callbacks, signal)
-            : await this.streamResponses(inputToSend, tools, callbacks, signal);
+          result = await this.streamResponses(inputToSend, tools, callbacks, signal);
         } catch (apiErr) {
           const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
-          const match = msg.match(/array too long.*?length\s+(\d+).*?length\s+(\d+)/i);
-          if (match && allMcpTools.length > 0) {
-            const maxAllowed = parseInt(match[1]!, 10);
-            const got = parseInt(match[2]!, 10);
-            this.toolBudget = Math.max(0, activeMcpTools.length - (got - maxAllowed));
-            activeMcpTools = allMcpTools.slice(0, this.toolBudget);
-            tools = [...builtinTools, ...activeMcpTools];
-            result = isFollowUp
-              ? await this.callResponsesNoStream(inputToSend, tools, callbacks, signal)
-              : await this.streamResponses(inputToSend, tools, callbacks, signal);
+          if (msg.includes("429")) {
+            await new Promise((r) => setTimeout(r, 30_000));
+            result = await this.streamResponses(inputToSend, tools, callbacks, signal);
           } else {
-            throw apiErr;
+            const match = msg.match(/array too long.*?length\s+(\d+).*?length\s+(\d+)/i);
+            if (match && allMcpTools.length > 0) {
+              const maxAllowed = parseInt(match[1]!, 10);
+              const got = parseInt(match[2]!, 10);
+              this.toolBudget = Math.max(0, activeMcpTools.length - (got - maxAllowed));
+              activeMcpTools = allMcpTools.slice(0, this.toolBudget);
+              tools = [...builtinTools, ...activeMcpTools];
+              result = await this.streamResponses(inputToSend, tools, callbacks, signal);
+            } else {
+              throw apiErr;
+            }
           }
         }
         fullText += result.text;
@@ -290,12 +311,30 @@ export class LibreChatClient {
               continue;
             }
           }
-          if (result.text && autoContinues < MAX_AUTO_CONTINUES && turnToolItems.length > 0 && looksLikeUnfinished(result.text)) {
-            autoContinues++;
-            currentInput.push({ type: "message", role: "assistant", content: result.text });
-            currentInput.push({ type: "message", role: "user", content: t("client.auto_continue") });
-            continue;
+
+          // Claim-guard: catch unverified claims before finishing
+          if (result.text && autoContinues < MAX_AUTO_CONTINUES) {
+            const claimNudge = detectUnverifiedClaims(result.text, turnToolItems);
+            if (claimNudge) {
+              autoContinues++;
+              currentInput.push({ type: "message", role: "assistant", content: result.text });
+              currentInput.push({ type: "message", role: "user", content: claimNudge });
+              continue;
+            }
           }
+
+          // Auto-continue: pure-text turns that end with intention phrases
+          if (result.text && autoContinues < MAX_AUTO_CONTINUES && looksLikeUnfinished(result.text)) {
+            const lastUserMsg = [...currentInput].reverse().find(i => i.type === "message" && i.role === "user");
+            const userAskedQuestion = lastUserMsg?.type === "message" && typeof lastUserMsg.content === "string" && lastUserMsg.content.trim().endsWith("?");
+            if (!userAskedQuestion) {
+              autoContinues++;
+              currentInput.push({ type: "message", role: "assistant", content: result.text });
+              currentInput.push({ type: "message", role: "user", content: t("client.auto_continue") });
+              continue;
+            }
+          }
+
           callbacks.onDone(fullText, turnToolItems);
           return;
         }
@@ -322,6 +361,25 @@ export class LibreChatClient {
 
           callbacks.onToolCall(fc.name, args);
 
+          // Destructive command gate
+          if (callbacks.onBeforeExec) {
+            const proceed = await callbacks.onBeforeExec(fc.name, args);
+            if (!proceed) {
+              const denied = t("client.command_denied");
+              for (const dup of group) {
+                const callItem: InputItem = {
+                  type: "function_call", id: dup.id, call_id: dup.call_id,
+                  name: dup.name, arguments: dup.arguments, status: "completed",
+                };
+                const outputItem: InputItem = { type: "function_call_output", call_id: dup.call_id, output: denied };
+                currentInput.push(callItem, outputItem);
+                turnToolItems.push(callItem, outputItem);
+              }
+              callbacks.onToolResult(fc.name, denied);
+              continue;
+            }
+          }
+
           let toolResult: { output: string; isError?: boolean };
           if (fc.name === "advisor") {
             const advisorResponse = await this.callAdvisor(currentInput);
@@ -334,8 +392,7 @@ export class LibreChatClient {
           callbacks.onToolResult(fc.name, toolResult.output);
 
           let output = encodeToolOutput(toolResult.output);
-          const failed = toolResult.isError || /^(Fejl|Error|Ukendt værktøj|Unknown tool)/.test(toolResult.output);
-          if (failed) {
+          if (toolResult.isError) {
             output += `\n\n${t("client.tool_hint")}`;
           }
           for (const dup of group) {
