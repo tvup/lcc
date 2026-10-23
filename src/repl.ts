@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { LibreChatClient, type InputItem, type ContentPart } from "./client.js";
-import { loadConfig, saveConfig, CONFIG_DIR } from "./config.js";
+import { loadConfig, saveConfig, CONFIG_DIR, loadPlugins, savePlugins, ensurePluginDir } from "./config.js";
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
 import { loadSkills, findSkill, renderSkill, type Skill } from "./skills.js";
@@ -155,6 +155,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     { cmd: "/tools", desc: t("cmd.tools") },
     { cmd: "/mcp", desc: t("cmd.mcp") },
     { cmd: "/addons", desc: t("cmd.addons") },
+    { cmd: "/plugin", desc: t("cmd.plugin") },
     { cmd: "/update", desc: t("cmd.update") },
     { cmd: "/restart", desc: t("cmd.restart") },
     { cmd: "/voice", desc: t("cmd.voice") },
@@ -575,6 +576,11 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
         }
         console.log(chalk.dim(`\n  ${t("repl.addons_hint")}`));
       }
+      continue;
+    }
+
+    if (trimmed === "/plugin" || trimmed.startsWith("/plugin ")) {
+      await doPlugin(rl, trimmed);
       continue;
     }
 

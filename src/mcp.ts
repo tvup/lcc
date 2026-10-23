@@ -135,7 +135,8 @@ export class McpManager {
     const entries = Object.entries(config.mcpServers);
     if (entries.length === 0) return;
 
-    const CONNECT_TIMEOUT = 60_000;
+    const CONNECT_TIMEOUT = 25 * 60 * 1000; // 25 minutter
+    const CALL_TOOL_TIMEOUT = 25 * 60 * 1000; // 25 minutter
     const defaultEnv = getDefaultEnvironment();
 
     const results = await Promise.allSettled(
@@ -238,10 +239,14 @@ export class McpManager {
     }
 
     try {
-      const result = await entry.server.client.callTool({
-        name: entry.originalName,
-        arguments: args,
-      });
+      const result = await withTimeout(
+        entry.server.client.callTool({
+          name: entry.originalName,
+          arguments: args,
+        }),
+        CALL_TOOL_TIMEOUT,
+        "MCP call timeout",
+      );
 
       const content = result.content as Array<Record<string, unknown>>;
       const parts: string[] = [];
