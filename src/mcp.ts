@@ -135,8 +135,8 @@ export class McpManager {
     const entries = Object.entries(config.mcpServers);
     if (entries.length === 0) return;
 
-    const CONNECT_TIMEOUT = 25 * 60 * 1000; // 25 minutter
-    const CALL_TOOL_TIMEOUT = 25 * 60 * 1000; // 25 minutter
+    const CONNECT_TIMEOUT = 55 * 60 * 1000; // 55 minutter
+    const CALL_TOOL_TIMEOUT = 55 * 60 * 1000; // 55 minutter
     const defaultEnv = getDefaultEnvironment();
 
     const results = await Promise.allSettled(

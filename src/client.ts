@@ -209,16 +209,27 @@ export class LibreChatClient {
   }
 
   async listModels(): Promise<Array<{ id: string; name?: string }>> {
-    const res = await fetch(`${this.baseUrl}/models`, {
-      headers: { Authorization: `Bearer ${this.apiKey}` },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    const data = (await res.json()) as {
-      data: Array<{ id: string; name?: string }>;
-    };
-    this.knownAgents = new Set(data.data.map((m) => m.id));
-    this._agentMode = this.looksLikeAgent(this.modelId);
-    return data.data;
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const res = await fetch(`${this.baseUrl}/models`, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          data: Array<{ id: string; name?: string }>;
+        };
+        this.knownAgents = new Set(data.data.map((m) => m.id));
+        this._agentMode = this.looksLikeAgent(this.modelId);
+        return data.data;
+      }
+      if ([502, 503, 504].includes(res.status) && attempt < maxRetries - 1) {
+        const backoff = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+    throw new Error(t("client.repeated_errors"));
   }
 
   async listLLMModels(): Promise<string[]> {
@@ -627,6 +638,11 @@ export class LibreChatClient {
           detail = parsed.error?.message ?? parsed.message ?? errText;
         } catch { /* use raw text */ }
 
+        if ([502, 503, 504].includes(res.status) && attempt < 2) {
+          const backoff = 2 ** attempt * 2000;
+          await new Promise((r) => setTimeout(r, backoff));
+          continue;
+        }
         if (detail.includes("terminated") && attempt === 0) {
           await new Promise((r) => setTimeout(r, 3000));
           continue;
@@ -719,6 +735,12 @@ export class LibreChatClient {
           const parsed = JSON.parse(errText) as { error?: { message?: string }; message?: string };
           detail = parsed.error?.message ?? parsed.message ?? errText;
         } catch { /* use raw text */ }
+
+        if ([502, 503, 504].includes(res.status) && attempt < 2) {
+          const backoff = 2 ** attempt * 2000;
+          await new Promise((r) => setTimeout(r, backoff));
+          continue;
+        }
 
         if (res.status === 429 && attempt === 0) {
           await new Promise((r) => setTimeout(r, 30000));
