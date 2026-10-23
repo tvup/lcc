@@ -28,12 +28,16 @@ Kør `php artisan route:list --json` (eller via Sail) for at forstå API-struktu
 - Tilføj altid `$fillable` eller `$guarded` på Eloquent-modeller.
 - Tjek om projektet bruger Pest eller PHPUnit inden du skriver tests. Brug `RefreshDatabase` trait.
 
+## Verifikation efter ændringer
+
+- PHP-syntaks tjekkes automatisk efter edit/write — ret fejl med det samme.
+- Når du bruger `route()`: kør `bash` med `php artisan route:list --name=<route>` for at verificere at routen eksisterer.
+- Når du kalder en metode på en model/service: grep efter metoden for at sikre den findes.
+- Når du refererer en Blade-view: tjek at filen eksisterer med `read_file` eller `list_files`.
+- Kør `php artisan test --filter=TestName` efter ændringer for at verificere.
+
 ## Ved fejl
 
 - Tjek `storage/logs/laravel.log` FØRST.
 - Kør `php artisan config:clear && php artisan cache:clear && php artisan route:clear` hvis konfigurationsændringer ikke slår igennem.
 - Tjek `QUEUE_CONNECTION` i `.env` — er det `sync`, kører jobs ikke asynkront.
-
-## Testing
-
-Kør `php artisan test --filter=TestName` efter ændringer for at verificere.

@@ -169,6 +169,37 @@ export function executeTool(
   }
 }
 
+function detectSailPrefix(): string {
+  const cwd = process.cwd();
+  try {
+    const composer = readFileSync(resolve(cwd, "composer.json"), "utf-8");
+    if (!composer.includes("laravel/sail")) return "";
+  } catch {
+    return "";
+  }
+  for (const f of ["docker-compose.yml", "compose.yml"]) {
+    try {
+      const content = readFileSync(resolve(cwd, f), "utf-8");
+      if (content.includes("laravel.test")) return "./vendor/bin/sail ";
+    } catch { /* ignore */ }
+  }
+  return "";
+}
+
+function phpLint(filePath: string): string | null {
+  if (!filePath.endsWith(".php")) return null;
+  try {
+    const prefix = detectSailPrefix();
+    const cmd = `${prefix}php -l ${JSON.stringify(filePath)}`;
+    execSync(cmd, { encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"] });
+    return null;
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string };
+    const output = [e.stderr, e.stdout].filter(Boolean).join("\n").trim();
+    return output || "Syntax check failed";
+  }
+}
+
 function resolvePath(path: string): string {
   const resolved = resolve(path);
   if (existsSync(resolved)) return resolved;
@@ -232,7 +263,12 @@ function execWriteFile(args: Record<string, unknown>): ToolResult {
       mkdirSync(dir, { recursive: true });
     }
     writeFileSync(resolved, content, "utf-8");
-    return { output: t("tool.file_written", resolved, content.length) };
+    let output = t("tool.file_written", resolved, content.length);
+    const lintErr = phpLint(resolved);
+    if (lintErr) {
+      output += `\n\n⚠ PHP syntax error:\n${lintErr}`;
+    }
+    return { output, isError: !!lintErr };
   } catch (err) {
     return {
       output: t("tool.error.write_failed", err instanceof Error ? err.message : String(err)),
@@ -269,7 +305,12 @@ function execEditFile(args: Record<string, unknown>): ToolResult {
 
     const updated = content.replace(oldStr, newStr);
     writeFileSync(resolved, updated, "utf-8");
-    return { output: t("tool.file_edited", resolved) };
+    let output = t("tool.file_edited", resolved);
+    const lintErr = phpLint(resolved);
+    if (lintErr) {
+      output += `\n\n⚠ PHP syntax error:\n${lintErr}`;
+    }
+    return { output, isError: !!lintErr };
   } catch (err) {
     return {
       output: t("tool.error.edit_failed", err instanceof Error ? err.message : String(err)),
