@@ -83,6 +83,7 @@ const da: Record<string, string> = {
   "client.advisor_prompt": "Du er en senior reviewer. Gennemgå denne samtale og giv råd om tilgangen, fejl du ser, og hvad der bør gøres anderledes. Vær konkret og handlingsorienteret.\n\nSamtale:\n{0}",
   "client.advisor_error": "Advisor-kald fejlede: {0}",
   "client.advisor_empty": "Advisor svarede ikke.",
+  "client.auto_continue": "Du stoppede med en plan i stedet for at handle. Brug dine tools og udfør ændringerne nu. Stil ikke spørgsmål — gør det.",
 
   // Context prefix
   "ctx.label": "Kontekst",
@@ -307,6 +308,7 @@ const en: Record<string, string> = {
   "client.advisor_prompt": "You are a senior reviewer. Review this conversation and advise on the approach, any mistakes you see, and what should be done differently. Be specific and actionable.\n\nConversation:\n{0}",
   "client.advisor_error": "Advisor call failed: {0}",
   "client.advisor_empty": "Advisor returned no response.",
+  "client.auto_continue": "You stopped with a plan instead of acting. Use your tools and make the changes now. Don't ask questions — do it.",
 
   // Context prefix
   "ctx.label": "Context",

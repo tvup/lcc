@@ -57,6 +57,19 @@ function itemChars(item: InputItem): number {
   return 0;
 }
 
+const UNFINISHED_PATTERNS = [
+  /\b(lad os|let's|let me|jeg vil|i'll|i will)\b/i,
+  /\b(skal jeg|should i|want me to|vil du have)\b/i,
+  /\b(først|first|start with|starte med)\b.*[:.]?\s*$/im,
+  /\b(næste skridt|next step|the plan)\b/i,
+  /\b(here'?s what|her er hvad|fremgangsmåde)\b/i,
+];
+
+function looksLikeUnfinished(text: string): boolean {
+  const last500 = text.slice(-500);
+  return UNFINISHED_PATTERNS.some((p) => p.test(last500));
+}
+
 function compressInputHistory(input: InputItem[]): InputItem[] {
   // Find tool-pair boundaries (call_id groups) from the end
   const pairEnds: number[] = [];
@@ -209,6 +222,8 @@ export class LibreChatClient {
     let activeMcpTools = allMcpTools.slice(0, this.toolBudget);
     let tools: ToolDef[] = [...builtinTools, ...activeMcpTools];
     let roundTrips = 0;
+    let autoContinues = 0;
+    const MAX_AUTO_CONTINUES = 2;
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -274,6 +289,12 @@ export class LibreChatClient {
               });
               continue;
             }
+          }
+          if (result.text && autoContinues < MAX_AUTO_CONTINUES && turnToolItems.length > 0 && looksLikeUnfinished(result.text)) {
+            autoContinues++;
+            currentInput.push({ type: "message", role: "assistant", content: result.text });
+            currentInput.push({ type: "message", role: "user", content: t("client.auto_continue") });
+            continue;
           }
           callbacks.onDone(fullText, turnToolItems);
           return;
