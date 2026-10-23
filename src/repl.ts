@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { LibreChatClient, type InputItem, type ContentPart } from "./client.js";
-import { loadConfig, saveConfig, CONFIG_DIR, loadPlugins, savePlugins, ensurePluginDir } from "./config.js";
+import { loadConfig, saveConfig, CONFIG_DIR, loadPlugins, savePlugins, ensurePluginDir, type Config } from "./config.js";
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
 import { loadSkills, findSkill, renderSkill, type Skill } from "./skills.js";
@@ -929,7 +929,7 @@ async function doConfig(
   voiceSettings: VoiceSettings,
 ): Promise<VoiceSettings> {
   const voice = { ...voiceSettings };
-  let cfg: { url: string; apiKey: string; advisorModel: string; language: string };
+  let cfg: Config
   try {
     const loaded = loadConfig();
     cfg = {
@@ -967,7 +967,7 @@ async function doConfig(
       ? (cachedAgents.find((a) => a.id === cfg.advisorModel)?.name ?? cfg.advisorModel)
       : t("config.not_set");
     row(3, t("config.advisor"), advisorLabel);
-    row(4, t("config.language"), langName(cfg.language));
+    row(4, t("config.language"), langName(cfg.language ?? getLocale()));
     row(5, t("config.voice_provider"), providerName(voice.provider));
     row(6, t("config.voice_language"), voice.language);
     row(7, t("config.keys_submenu"), "");
@@ -1013,8 +1013,8 @@ async function doConfig(
         }
         case "4": {
           console.log(`\n  ${t("config.lang_select")}`);
-          console.log(`  ${chalk.cyan("1.")} ${t("config.lang_da")}${cfg.language === "da" ? chalk.green(" ●") : ""}`);
-          console.log(`  ${chalk.cyan("2.")} ${t("config.lang_en")}${cfg.language.startsWith("en") ? chalk.green(" ●") : ""}`);
+          console.log(`  ${chalk.cyan("1.")} ${t("config.lang_da")}${(cfg.language ?? "en") === "da" ? chalk.green(" ●") : ""}`);
+          console.log(`  ${chalk.cyan("2.")} ${t("config.lang_en")}${cfg.language?.startsWith("en") ? chalk.green(" ●") : ""}`);
           console.log("");
           const langChoice = (await rl.question(chalk.green(`  ${t("config.select", 2)} `))).trim();
           if (langChoice === "1") { cfg.language = "da"; setLocale("da"); }
@@ -1060,6 +1060,16 @@ async function doConfig(
             const val = (await rl.question(chalk.dim(`  ${t("config.openai_key")}: `))).trim();
             if (val) voice.openaiApiKey = val;
           }
+          break;
+        }
+        case "8": {
+          console.log(`\n  ${t("config.prompt_finish_alert")}: ${cfg.showPromptFinishAlert ? t("config.yes") : t("config.no")}`);
+          console.log(`  ${chalk.cyan("1.")} ${t("config.yes")}`);
+          console.log(`  ${chalk.cyan("2.")} ${t("config.no")}`);
+          console.log("");
+          const choice = (await rl.question(chalk.green(`  ${t("config.select", 2)} `))).trim();
+          if (choice === "1") cfg.showPromptFinishAlert = true;
+          else if (choice === "2") cfg.showPromptFinishAlert = false;
           break;
         }
       }
