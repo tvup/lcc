@@ -971,6 +971,7 @@ async function doConfig(
     row(5, t("config.voice_provider"), providerName(voice.provider));
     row(6, t("config.voice_language"), voice.language);
     row(7, t("config.keys_submenu"), "");
+    row(8, t("config.prompt_finish_alert"), cfg.showPromptFinishAlert ? t("config.yes") : t("config.no"), "");
     console.log("");
   };
 
