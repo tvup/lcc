@@ -1,0 +1,36 @@
+Der er nogle problemer:
+  1. For mange stoppunkter - Der blev lavet små, trinvise handlinger (læste én fil ad gangen, rettede én linje ad gangen) i stedet for at samle arbejdet i større enheder. Hver gang jeg skrev "ja tak", var det for at få dig til at fortsætte med næste lille skridt.
+
+  2. Spørgsmål uden svaremulighed - Du stillede undertiden spørgsmål eller foreslog næste skridt, men afsluttede ofte med at handle alligevel, før jeg kunne svare.
+
+  3. For lidt kontekst før handling - Du begyndte at rette i .env før Du havde fuldt forstået hele ban-flowet (hvordan checkBan middleware virker, hvordan getLogStores gemmer data, osv.).
+
+  4. Piecepicmeal løsning - I stedet for at levere en samlet analyse og løsning, gav Du mig små bidder ad gangen.
+
+Konkrete forslag til forbedring
+
+| Problem | Løsning |
+|---------|---------|
+| Mange små "ja tak"-cyklusser | Batch relaterede handlinger - Læs flere filer på én gang, foretag flere rettelser i én omgang |
+| Ofte afbrydelser | Kør arbejdet færdigt før du beder om bekræftelse, medmindre det er en stor arkitekturel ændring |
+| Spørgsmål uden svaremulighed | Samle spørgsmål - Stil alle opfølgende spørgsmål på én gang, så brugeren kan svare på dem samlet |
+| For lidt kontekst | Undersøg bredt før du handler - Læs relaterede filer (routes, middleware, config, tests) før du foreslår rettelser |
+| Ikke-overskuelig fremgang | Giv et samlet overblik først - "Her er problemet, her er årsagen, her er løsningen" - i stedet for drypvise opdateringer |
+
+Hvordan jeg ønsker det fremover:
+
+I stedet for at:
+  1. Læse users.js → spørge "ja tak"
+  2. Læse checkBan.js → spørge "ja tak"
+  3. Læse .env → spørge "ja tak"
+  4. Rette .env → spørge "ja tak"
+
+...vil jeg have:
+  1. Læst alle relevante filer på én gang (users.js, checkBan.js, getLogStores.js, .env)
+  2. Identificeret roden til problemet (BAN_VIOLATIONS=false + ugyldig BAN_DURATION)
+  3. Foretaget rettelsen i .env
+  4. Give en samlet rapport med: problem, årsag, rettelse, og næste skridt (genstart server)
+
+Sørg for at få dette fixet!
+
+Sørg for at inddrage advisor!
