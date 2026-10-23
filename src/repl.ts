@@ -1359,6 +1359,21 @@ async function doPlugin(rl: readline.Interface, arg: string): Promise<void> {
     return;
   }
 
+  if (sub === "list" || sub === "liste") {
+    const plugins = loadPlugins();
+    const entries = Object.entries(plugins);
+    if (entries.length === 0) {
+      console.log(chalk.yellow(`  ${t("plugin.no_plugins")}`));
+    } else {
+      console.log(`  ${t("plugin.list_header")}`);
+      entries.forEach(([pName, info]) => {
+        const status = info.installed ? chalk.green("✓") : chalk.dim("○");
+        console.log(`  ${status} ${pName}${info.version ? chalk.dim(` v${info.version}`) : ""}${info.path ? chalk.dim(` · ${info.path}`) : ""}`);
+      });
+    }
+    return;
+  }
+
   if (sub === "marketplace" || sub === "markedsplads") {
     const action = parts[2];
     const pathOrName = parts.slice(3).join(" ").trim();
