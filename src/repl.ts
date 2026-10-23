@@ -1338,6 +1338,61 @@ function checkForUpdate(): void {
     .catch(() => {});
 }
 
+async function doPlugin(rl: readline.Interface, arg: string): Promise<void> {
+  const parts = arg.split(/\s+/);
+  const sub = parts[1];
+  const name = parts.slice(2).join(" ").trim();
+  const plugins = loadPlugins();
+
+  if (!sub) {
+    console.log(`  ${t("cmd.plugin")}`);
+    const entries = Object.entries(plugins);
+    if (entries.length === 0) {
+      console.log(chalk.yellow(`  ${t("repl.no_plugins")}`));
+    } else {
+      entries.forEach(([pName, info]) => {
+        const status = info.installed ? chalk.green("✓") : chalk.dim("○");
+        console.log(`  ${status} ${pName}${info.version ? chalk.dim(` v${info.version}`) : ""}`);
+      });
+    }
+    return;
+  }
+
+  if (sub === "install" || sub === "installér") {
+    if (!name) {
+      console.log(chalk.yellow(`  ${t("repl.specify_plugin")}`));
+      return;
+    }
+    if (plugins[name]?.installed) {
+      console.log(chalk.yellow(`  ${t("plugin.already_installed", name)}`));
+      return;
+    }
+    ensurePluginDir();
+    const updated = { ...plugins, [name]: { installed: true } };
+    savePlugins(updated);
+    console.log(chalk.green(`  ${t("plugin.installed", name)}`));
+    return;
+  }
+
+  if (sub === "remove" || sub === "fjern") {
+    if (!name) {
+      console.log(chalk.yellow(`  ${t("repl.specify_plugin")}`));
+      return;
+    }
+    if (!plugins[name]) {
+      console.log(chalk.yellow(`  ${t("plugin.not_found", name)}`));
+      return;
+    }
+    const updated = { ...plugins };
+    delete updated[name];
+    savePlugins(updated);
+    console.log(chalk.green(`  ${t("repl.plugin_removed", name)}`));
+    return;
+  }
+
+  console.log(chalk.yellow(`  ${t("repl.unknown_plugin_cmd")}`));
+}
+
 function formatError(error: Error): string {
   const msg = error.message;
 

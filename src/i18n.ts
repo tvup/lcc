@@ -158,6 +158,9 @@ const da: Record<string, string> = {
   "repl.image_attached": "🖼 {0}",
   "repl.no_conversation": "Ingen samtale at gemme.",
   "repl.saved_as": "Gemt som: {0}",
+  "repl.specify_plugin": "Angiv plugin-navn.",
+  "repl.plugin_removed": "Plugin fjernet: {0}",
+  "repl.unknown_plugin_cmd": "Ukendt plugin-kommando.",
   "repl.no_saved": "Ingen gemte samtaler.",
   "repl.select": "Vælg (1-{0}):",
   "repl.invalid_choice": "Ugyldigt valg.",
@@ -426,6 +429,9 @@ const en: Record<string, string> = {
   "repl.addons_active": "🧩 Addons: {0}",
   "repl.no_addons": "No addons found. Create ~/.config/lcc/addons/<name>.md",
   "repl.addons_hint": "✓ = active in this project · Addons: .lcc/addons/ (project) > ~/.config/lcc/addons/ (user) > builtin",
+  "repl.specify_plugin": "Specify plugin name.",
+  "repl.plugin_removed": "Plugin removed: {0}",
+  "repl.unknown_plugin_cmd": "Unknown plugin command.",
 
   // Error formatting
   "err.connection": "Cannot connect to the server. Check LIBRECHAT_URL.",
