@@ -608,7 +608,7 @@ export class LibreChatClient {
 
     const jsonBody = JSON.stringify(body);
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       if (signal?.aborted) throw new Error(t("cancelled"));
 
       let res: Response;
@@ -623,8 +623,8 @@ export class LibreChatClient {
           signal,
         });
       } catch (fetchErr) {
-        if (attempt === 0) {
-          await new Promise((r) => setTimeout(r, 2000));
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
           continue;
         }
         throw fetchErr;
@@ -638,13 +638,12 @@ export class LibreChatClient {
           detail = parsed.error?.message ?? parsed.message ?? errText;
         } catch { /* use raw text */ }
 
-        if ([502, 503, 504].includes(res.status) && attempt < 2) {
-          const backoff = 2 ** attempt * 2000;
-          await new Promise((r) => setTimeout(r, backoff));
+        if (detail.includes("terminated") && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 3000));
           continue;
         }
-        if (detail.includes("terminated") && attempt === 0) {
-          await new Promise((r) => setTimeout(r, 3000));
+        if ([502, 503, 504].includes(res.status) && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 5000 * (attempt + 1)));
           continue;
         }
         throw new Error(`HTTP ${res.status}: ${detail}`);
@@ -715,7 +714,7 @@ export class LibreChatClient {
       body["reasoning_effort"] = "none";
     }
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       if (signal?.aborted) throw new Error(t("cancelled"));
 
       const res = await fetch(`${this.baseUrl}/responses`, {
@@ -736,14 +735,13 @@ export class LibreChatClient {
           detail = parsed.error?.message ?? parsed.message ?? errText;
         } catch { /* use raw text */ }
 
-        if ([502, 503, 504].includes(res.status) && attempt < 2) {
-          const backoff = 2 ** attempt * 2000;
-          await new Promise((r) => setTimeout(r, backoff));
+        if (res.status === 429 && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 30000));
           continue;
         }
 
-        if (res.status === 429 && attempt === 0) {
-          await new Promise((r) => setTimeout(r, 30000));
+        if ([502, 503, 504].includes(res.status) && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 5000 * (attempt + 1)));
           continue;
         }
 

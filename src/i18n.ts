@@ -201,6 +201,9 @@ const da: Record<string, string> = {
   "err.wakeforce": " — tjek din Wakeforce-licens.",
   "err.not_found": "Endpoint ikke fundet. Tjek LIBRECHAT_URL. ({0})",
   "err.rate_limit": "Rate limit nået. Vent lidt og prøv igen.",
+  "err.gateway_timeout": "Serveren svarede ikke i tide (504 Gateway Timeout). Prøver igen...",
+  "err.gateway_timeout_final": "Serveren svarede ikke i tide (504). Prøv igen om lidt.",
+  "err.server_error": "Serverfejl ({0}). Prøver igen...",
 
   // Tools
   "tool.error.path_required": "Fejl: path er påkrævet",
@@ -443,6 +446,9 @@ const en: Record<string, string> = {
   "err.wakeforce": " — check your Wakeforce licence.",
   "err.not_found": "Endpoint not found. Check LIBRECHAT_URL. ({0})",
   "err.rate_limit": "Rate limit reached. Wait a moment and try again.",
+  "err.gateway_timeout": "Server did not respond in time (504 Gateway Timeout). Retrying...",
+  "err.gateway_timeout_final": "Server did not respond in time (504). Please try again shortly.",
+  "err.server_error": "Server error ({0}). Retrying...",
 
   // Tools
   "tool.error.path_required": "Error: path is required",

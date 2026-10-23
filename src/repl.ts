@@ -1470,9 +1470,9 @@ function formatError(error: Error): string {
       case "403": return t("err.access_denied", detail) + (detail.includes("license") ? t("err.wakeforce") : "");
       case "404": return t("err.not_found", detail);
       case "429": return t("err.rate_limit");
-      case "502": return t("err.gateway", detail);
-      case "503": return t("err.gateway", detail);
-      case "504": return t("err.gateway", detail);
+      case "502":
+      case "503": return t("err.server_error", status);
+      case "504": return t("err.gateway_timeout_final");
       default: return msg;
     }
   }
