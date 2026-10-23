@@ -35,6 +35,10 @@ interface FailedServer {
 const MCP_CONFIG_FILE = join(CONFIG_DIR, "mcp.json");
 const MCP_STATE_FILE = join(CONFIG_DIR, "mcp-state.json");
 
+function expandEnvVars(value: string): string {
+  return value.replace(/\$\{([^}]+)\}/g, (_, name: string) => process.env[name] ?? "");
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, msg: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
@@ -136,11 +140,15 @@ export class McpManager {
 
     const results = await Promise.allSettled(
       entries.map(async ([name, serverConfig]) => {
-        const env = { ...defaultEnv, ...(serverConfig.env ?? {}) };
+        const env = { ...defaultEnv };
+        for (const [k, v] of Object.entries(serverConfig.env ?? {})) {
+          env[k] = expandEnvVars(v);
+        }
+        const args = (serverConfig.args ?? []).map(expandEnvVars);
 
         const transport = new StdioClientTransport({
           command: serverConfig.command,
-          args: serverConfig.args,
+          args,
           env,
           stderr: "pipe",
         });

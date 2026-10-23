@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from "node:fs";
-import { execSync, execFileSync } from "node:child_process";
+import { execSync, execFileSync, spawn } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { t } from "./i18n.js";
 
@@ -81,7 +81,7 @@ export const toolDefinitions: ToolDef[] = [
     type: "function",
     name: "bash",
     description:
-      "Run a bash command. Working dir is the project root. 30s timeout.",
+      "Run a bash command. Working dir is the project root. 120s timeout.",
     parameters: {
       type: "object",
       properties: {
@@ -147,10 +147,11 @@ export const toolDefinitions: ToolDef[] = [
   },
 ];
 
-export function executeTool(
+export async function executeTool(
   name: string,
   args: Record<string, unknown>,
-): ToolResult {
+  signal?: AbortSignal,
+): Promise<ToolResult> {
   switch (name) {
     case "read_file":
       return execReadFile(args);
@@ -159,7 +160,7 @@ export function executeTool(
     case "edit_file":
       return execEditFile(args);
     case "bash":
-      return execBash(args);
+      return execBash(args, signal);
     case "grep":
       return execGrep(args);
     case "list_files":
@@ -328,29 +329,63 @@ function execEditFile(args: Record<string, unknown>): ToolResult {
   }
 }
 
-function execBash(args: Record<string, unknown>): ToolResult {
+async function execBash(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
   const command = String(args["command"] ?? "");
   if (!command) return { output: t("tool.error.command_required"), isError: true };
 
-  try {
-    const output = execSync(command, {
-      encoding: "utf-8",
-      timeout: 30_000,
+  const TIMEOUT = 120_000;
+
+  return new Promise<ToolResult>((resolve) => {
+    const child = spawn("bash", ["-c", command], {
       stdio: ["pipe", "pipe", "pipe"],
-      maxBuffer: 1024 * 1024,
     });
-    return truncate(output);
-  } catch (err) {
-    const execErr = err as {
-      stdout?: string;
-      stderr?: string;
-      status?: number;
-      message: string;
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+
+    const finish = (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve(truncate(stdout));
+      } else {
+        const output = [stdout, stderr].filter(Boolean).join("\n");
+        resolve(truncate(`Exit code: ${code ?? "?"}\n${output || "No output"}`));
+      }
     };
-    const output = [execErr.stdout, execErr.stderr].filter(Boolean).join("\n");
-    const exitCode = execErr.status ?? "?";
-    return truncate(`Exit code: ${exitCode}\n${output || execErr.message}`);
-  }
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      child.kill("SIGKILL");
+      settled = true;
+      const output = [stdout, stderr].filter(Boolean).join("\n");
+      resolve(truncate(`Timeout (${TIMEOUT / 1000}s)\n${output}`));
+    }, TIMEOUT);
+
+    if (signal) {
+      const onAbort = () => { if (!settled) child.kill("SIGTERM"); };
+      signal.addEventListener("abort", onAbort, { once: true });
+      child.on("close", () => signal.removeEventListener("abort", onAbort));
+    }
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+      if (stdout.length > MAX_OUTPUT * 2) stdout = stdout.slice(-MAX_OUTPUT * 2);
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+      if (stderr.length > MAX_OUTPUT) stderr = stderr.slice(-MAX_OUTPUT);
+    });
+    child.on("close", finish);
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ output: `Error: ${err.message}`, isError: true });
+    });
+  });
 }
 
 let hasRg: boolean | null = null;

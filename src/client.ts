@@ -240,8 +240,8 @@ export class LibreChatClient {
   ): Promise<void> {
     let fullText = "";
     const turnToolItems: InputItem[] = [];
-    const contextPrefix = this.buildContextPrefix();
-    let currentInput: InputItem[] = [...contextPrefix, ...history];
+    const instructions = this.buildInstructions();
+    let currentInput: InputItem[] = [...history];
     const builtinTools: ToolDef[] = this.toolsEnabled ? [...toolDefinitions] : [];
     const allMcpTools = this.mcp && this.toolsEnabled ? this.mcp.getToolDefs() : [];
     let activeMcpTools = allMcpTools.slice(0, this.toolBudget);
@@ -256,16 +256,19 @@ export class LibreChatClient {
       roundTrips++;
 
       try {
+        if (roundTrips === 1) {
+          currentInput = await this.summarizeOldHistory(currentInput);
+        }
         const inputToSend = compressInputHistory(currentInput);
 
         let result: { text: string; functionCalls: StreamedFunctionCall[] };
         try {
-          result = await this.streamResponses(inputToSend, tools, callbacks, signal);
+          result = await this.streamResponses(inputToSend, tools, callbacks, signal, instructions);
         } catch (apiErr) {
           const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
           if (msg.includes("429")) {
             await new Promise((r) => setTimeout(r, 30_000));
-            result = await this.streamResponses(inputToSend, tools, callbacks, signal);
+            result = await this.streamResponses(inputToSend, tools, callbacks, signal, instructions);
           } else {
             const match = msg.match(/array too long.*?length\s+(\d+).*?length\s+(\d+)/i);
             if (match && allMcpTools.length > 0) {
@@ -274,7 +277,7 @@ export class LibreChatClient {
               this.toolBudget = Math.max(0, activeMcpTools.length - (got - maxAllowed));
               activeMcpTools = allMcpTools.slice(0, this.toolBudget);
               tools = [...builtinTools, ...activeMcpTools];
-              result = await this.streamResponses(inputToSend, tools, callbacks, signal);
+              result = await this.streamResponses(inputToSend, tools, callbacks, signal, instructions);
             } else {
               throw apiErr;
             }
@@ -387,7 +390,7 @@ export class LibreChatClient {
           } else if (this.mcp?.hasTool(fc.name)) {
             toolResult = await this.mcp.callTool(fc.name, args);
           } else {
-            toolResult = executeTool(fc.name, args);
+            toolResult = await executeTool(fc.name, args, signal);
           }
           callbacks.onToolResult(fc.name, toolResult.output);
 
@@ -422,7 +425,7 @@ export class LibreChatClient {
     }
   }
 
-  private buildContextPrefix(): InputItem[] {
+  private buildInstructions(): string {
     const cwd = process.cwd();
     let fileList = "";
     try {
@@ -444,14 +447,14 @@ export class LibreChatClient {
       if (log) gitInfo += `\n  Recent commits:\n${log.split("\n").map((l) => `    ${l}`).join("\n")}`;
     } catch { /* not a git repo */ }
 
-    let instructions = "";
+    let projectInstructions = "";
     for (const name of ["AGENTS.md", "CLAUDE.md"]) {
       const p = join(cwd, name);
       if (existsSync(p)) {
         try {
           const content = readFileSync(p, "utf-8").trim();
           if (content) {
-            instructions += `\n\n[${name}]\n${content}`;
+            projectInstructions += `\n\n[${name}]\n${content}`;
           }
         } catch { /* ignore */ }
       }
@@ -460,7 +463,7 @@ export class LibreChatClient {
     const allAddons = loadAddons();
     this.matchedAddons = detectAddons(allAddons, cwd);
     for (const addon of this.matchedAddons) {
-      instructions += `\n\n[Addon: ${addon.name}]\n${addon.body}`;
+      projectInstructions += `\n\n[Addon: ${addon.name}]\n${addon.body}`;
     }
 
     let mcpInfo = "";
@@ -473,18 +476,7 @@ export class LibreChatClient {
       }
     }
 
-    return [
-      {
-        type: "message",
-        role: "user",
-        content: `[${t("ctx.label")}] ${t("ctx.working_in")} ${cwd}\n${t("ctx.files_in_root")} ${fileList}${gitInfo}\n\n${t("ctx.system")}${instructions}${mcpInfo}`,
-      },
-      {
-        type: "message",
-        role: "assistant",
-        content: t("ctx.understood"),
-      },
-    ];
+    return `${t("ctx.working_in")} ${cwd}\n${t("ctx.files_in_root")} ${fileList}${gitInfo}\n\n${t("ctx.system")}${projectInstructions}${mcpInfo}`;
   }
 
   async callAdvisor(history: InputItem[]): Promise<string> {
@@ -530,17 +522,74 @@ export class LibreChatClient {
     return parts.join("\n") || t("client.advisor_empty");
   }
 
+  private async summarizeOldHistory(input: InputItem[]): Promise<InputItem[]> {
+    const totalChars = input.reduce((sum, item) => sum + itemChars(item), 0);
+    if (totalChars <= COMPRESS_BUDGET_CHARS || !this.advisorModel) return input;
+
+    // Find split point: keep the recent half, summarize the old half
+    let chars = 0;
+    let splitIdx = input.length;
+    for (let i = input.length - 1; i >= 0; i--) {
+      chars += itemChars(input[i]!);
+      if (chars > COMPRESS_BUDGET_CHARS / 2) { splitIdx = i; break; }
+    }
+    if (splitIdx <= 1) return input;
+
+    const oldPart = input.slice(0, splitIdx);
+    const recentPart = input.slice(splitIdx);
+
+    // Build a text representation of the old part for the summarizer
+    const oldText = oldPart
+      .filter(i => i.type === "message")
+      .map(i => `${(i as { role: string }).role}: ${typeof (i as { content: unknown }).content === "string" ? (i as { content: string }).content : "[complex]"}`)
+      .join("\n")
+      .slice(0, 20_000);
+
+    try {
+      const summaryInput: InputItem[] = [
+        { type: "message", role: "user", content: t("client.summarize_prompt", oldText) },
+      ];
+      const res = await fetch(`${this.baseUrl}/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
+        body: JSON.stringify({ model: this.advisorModel, input: summaryInput, stream: false }),
+      });
+      if (!res.ok) return input;
+
+      const data = (await res.json()) as { output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }> };
+      const parts: string[] = [];
+      for (const item of data.output ?? []) {
+        if (item.type === "message" && item.content) {
+          for (const c of item.content) {
+            if (c.type === "output_text" && c.text) parts.push(c.text);
+          }
+        }
+      }
+      const summary = parts.join("\n");
+      if (!summary) return input;
+
+      return [
+        { type: "message", role: "user", content: t("client.summary_prefix", summary) },
+        ...recentPart,
+      ];
+    } catch {
+      return input;
+    }
+  }
+
   private async callResponsesNoStream(
     input: InputItem[],
     tools: ToolDef[],
     callbacks: StreamCallbacks,
     signal?: AbortSignal,
+    instructions?: string,
   ): Promise<{ text: string; functionCalls: StreamedFunctionCall[] }> {
     const body: Record<string, unknown> = {
       model: this.modelId,
       input,
       stream: false,
     };
+    if (instructions) body["instructions"] = instructions;
     if (tools.length > 0) {
       body["tools"] = tools;
       body["reasoning_effort"] = "none";
@@ -637,12 +686,14 @@ export class LibreChatClient {
     tools: ToolDef[],
     callbacks: StreamCallbacks,
     signal?: AbortSignal,
+    instructions?: string,
   ): Promise<{ text: string; functionCalls: StreamedFunctionCall[] }> {
     const body: Record<string, unknown> = {
       model: this.modelId,
       input,
       stream: true,
     };
+    if (instructions) body["instructions"] = instructions;
     if (tools.length > 0) {
       body["tools"] = tools;
       body["reasoning_effort"] = "none";
@@ -759,7 +810,7 @@ export class LibreChatClient {
         }
 
         if (!text && functionCalls.length === 0) {
-          return this.callResponsesNoStream(input, tools, callbacks, signal);
+          return this.callResponsesNoStream(input, tools, callbacks, signal, instructions);
         }
       }
 
@@ -768,7 +819,7 @@ export class LibreChatClient {
       }
 
       if (!text && functionCalls.length === 0 && receivedAnyEvent && attempt === 0) {
-        return this.callResponsesNoStream(input, tools, callbacks, signal);
+        return this.callResponsesNoStream(input, tools, callbacks, signal, instructions);
       }
 
       return { text, functionCalls };
