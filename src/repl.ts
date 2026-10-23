@@ -1341,15 +1341,16 @@ function checkForUpdate(): void {
 async function doPlugin(rl: readline.Interface, arg: string): Promise<void> {
   const parts = arg.split(/\s+/);
   const sub = parts[1];
-  const name = parts.slice(2).join(" ").trim();
-  const plugins = loadPlugins();
 
   if (!sub) {
     console.log(`  ${t("cmd.plugin")}`);
+    console.log(`  ${t("plugin.usage")}`);
+    const plugins = loadPlugins();
     const entries = Object.entries(plugins);
     if (entries.length === 0) {
-      console.log(chalk.yellow(`  ${t("repl.no_plugins")}`));
+      console.log(chalk.yellow(`  ${t("plugin.no_plugins")}`));
     } else {
+      console.log(`  ${t("plugin.list_header")}`);
       entries.forEach(([pName, info]) => {
         const status = info.installed ? chalk.green("✓") : chalk.dim("○");
         console.log(`  ${status} ${pName}${info.version ? chalk.dim(` v${info.version}`) : ""}`);
@@ -1358,27 +1359,65 @@ async function doPlugin(rl: readline.Interface, arg: string): Promise<void> {
     return;
   }
 
+  if (sub === "marketplace" || sub === "markedsplads") {
+    const action = parts[2];
+    const pathOrName = parts.slice(3).join(" ").trim();
+
+    if (action === "add" || action === "tilføj") {
+      if (!pathOrName) {
+        console.log(chalk.yellow(`  ${t("repl.specify_plugin")}`));
+        return;
+      }
+      console.log(chalk.cyan(`  ${t("plugin.marketplace_add", pathOrName)}`));
+      ensurePluginDir();
+      const plugins = loadPlugins();
+      const name = pathOrName.split("/").pop() || pathOrName;
+      const updated = { ...plugins, [name]: { path: pathOrName, installed: false } };
+      savePlugins(updated);
+      console.log(chalk.green(`  ${t("plugin.marketplace_install", name)}`));
+      return;
+    }
+
+    console.log(chalk.yellow(`  ${t("repl.unknown_plugin_cmd")}`));
+    return;
+  }
+
   if (sub === "install" || sub === "installér") {
-    if (!name) {
+    const fullName = parts.slice(2).join(" ").trim();
+    if (!fullName) {
       console.log(chalk.yellow(`  ${t("repl.specify_plugin")}`));
       return;
     }
+
+    // Parse name@version
+    const atIndex = fullName.lastIndexOf("@");
+    let name = fullName;
+    let version: string | undefined;
+    if (atIndex > 0) {
+      name = fullName.slice(0, atIndex);
+      version = fullName.slice(atIndex + 1);
+    }
+
+    const plugins = loadPlugins();
     if (plugins[name]?.installed) {
       console.log(chalk.yellow(`  ${t("plugin.already_installed", name)}`));
       return;
     }
+
     ensurePluginDir();
-    const updated = { ...plugins, [name]: { installed: true } };
+    const updated = { ...plugins, [name]: { version, installed: true } };
     savePlugins(updated);
-    console.log(chalk.green(`  ${t("plugin.installed", name)}`));
+    console.log(chalk.green(`  ${t("plugin.installed", name)}${version ? chalk.dim(` v${version}`) : ""}`));
     return;
   }
 
   if (sub === "remove" || sub === "fjern") {
+    const name = parts.slice(2).join(" ").trim();
     if (!name) {
       console.log(chalk.yellow(`  ${t("repl.specify_plugin")}`));
       return;
     }
+    const plugins = loadPlugins();
     if (!plugins[name]) {
       console.log(chalk.yellow(`  ${t("plugin.not_found", name)}`));
       return;
