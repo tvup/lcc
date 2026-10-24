@@ -620,6 +620,20 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
       if (done) return;
       continue;
     }
+    if (trimmed === "/hooks") {
+      const hooks = loadAllHooks();
+      console.log("");
+      if (hooks.length > 0) {
+        console.log("Available hooks:");
+        for (const h of hooks) {
+          const source = h.source === 'claude' ? t("repl.hook_source_claude") : h.source === 'project' ? t("repl.hook_source_project") : t("repl.hook_source_user");
+          console.log("  /" + h.name.padEnd(25) + " [" + source + "] - " + (h.description || ""));
+        }
+      } else {
+        console.log("No hooks installed in ~/.claude/hooks/");
+      }
+      console.log("");
+    }
 
     if (trimmed.startsWith("/")) {
       const slashName = trimmed.split(" ")[0]!.slice(1);

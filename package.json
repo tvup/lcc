@@ -1,6 +1,6 @@
 {
   "name": "lcc",
-  "version": "1.0.113",
+  "version": "1.0.114",
   "type": "module",
   "bin": {
     "lcc": "./dist/index.js"
