@@ -274,3 +274,78 @@ export function executeSessionEndHooks(): void {
     }
   }
 }
+
+/**
+ * Execute PreToolUse hooks
+ */
+export function executePreToolUseHooks(tool: string): void {
+  const hooks = loadAllHooks().filter(
+    (h) => h.hookType === "PreToolUse"
+  );
+  for (const hook of hooks) {
+    const body = renderHook(hook, tool);
+    if (body) {
+      execSync(body, { stdio: "pipe" });
+    }
+  }
+}
+
+/**
+ * Execute PostToolUse hooks
+ */
+export function executePostToolUseHooks(tool: string): void {
+  const hooks = loadAllHooks().filter(
+    (h) => h.hookType === "PostToolUse"
+  );
+  for (const hook of hooks) {
+    const body = renderHook(hook, tool);
+    if (body) {
+      execSync(body, { stdio: "pipe" });
+    }
+  }
+}
+
+/**
+ * Execute UserPromptSubmit hooks
+ */
+export function executeUserPromptSubmitHooks(prompt: string): void {
+  const hooks = loadAllHooks().filter(
+    (h) => h.hookType === "UserPromptSubmit"
+  );
+  for (const hook of hooks) {
+    const body = renderHook(hook, prompt);
+    if (body) {
+      execSync(body, { stdio: "pipe" });
+    }
+  }
+}
+
+/**
+ * Execute PreCompact hooks
+ */
+export function executePreCompactHooks(): void {
+  const hooks = loadAllHooks().filter(
+    (h) => h.hookType === "PreCompact"
+  );
+  for (const hook of hooks) {
+    const body = renderHook(hook, "");
+    if (body) {
+      execSync(body, { stdio: "pipe" });
+    }
+  }
+}
+
+/**
+ * Execute SubagentStop hooks
+ */
+export function executeSubagentStopHooks(): void {
+  const hooks = loadAllHooks().filter(
+    (h) => h.hookType === "SubagentStop"
+  );
+  for (const hook of hooks) {
+    const body = renderHook(hook, "");
+    if (body) {
+      execSync(body, { stdio: "pipe" });
+    }
+  }
+}

@@ -10,7 +10,18 @@ import { loadConfig, saveConfig, CONFIG_DIR, loadPlugins, savePlugins, ensurePlu
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
 import { loadSkills, findSkill, renderSkill, type Skill } from "./skills.js";
-import { executeSessionEndHooks, loadAllHooks, findHook, renderHook, type Hook } from "./hooks.js";
+import {
+  executeSessionEndHooks,
+  executePreToolUseHooks,
+  executePostToolUseHooks,
+  executeUserPromptSubmitHooks,
+  executePreCompactHooks,
+  executeSubagentStopHooks,
+  loadAllHooks,
+  findHook,
+  renderHook,
+  type Hook
+} from "./hooks.js";
 import { loadAddons, detectAddons } from "./addons.js";
 import { Spinner } from "./spinner.js";
 import { t, setLocale, getLocale, confirmYes, confirmHint } from "./i18n.js";
@@ -419,6 +430,9 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
 
     clearHints();
 
+    // Execute UserPromptSubmit hooks before processing the prompt
+    executeUserPromptSubmitHooks(input);
+
     // Multiline: if line ends with \, keep reading
     while (input.endsWith("\\")) {
       input = input.slice(0, -1) + "\n";
@@ -660,6 +674,8 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                 onDelta: (text) => { spinner.stop(); stdout.write(md.write(text)); },
                 onToolCall: (name, args) => {
                   spinner.stop(); stdout.write(md.flush());
+                  // Execute PreToolUse hooks before tool call
+                  executePreToolUseHooks(name);
                   const argsStr = Object.entries(args).map(([k, v]) => {
                     const val = typeof v === "string" && v.length > 80 ? v.slice(0, 77) + "..." : String(v);
                     return `${k}=${val}`;
@@ -669,6 +685,8 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                 },
                 onToolResult: (name, result) => {
                   spinner.stop();
+                  // Execute PostToolUse hooks after tool result
+                  executePostToolUseHooks(name);
                   const lines = result.split("\n");
                   const preview = lines.length > 5 ? lines.slice(0, 5).join("\n") + `\n  ... (${t("repl.lines_total", lines.length)})` : result;
                   stdout.write(chalk.dim(`  ← ${name}: ${preview}\n\n`));
@@ -679,6 +697,8 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                   if (toolItems.length > 0) history.push(...toolItems);
                   if (fullText) history.push({ type: "message", role: "assistant", content: fullText });
                   autoSave(history);
+                  // Execute PreCompact hooks after autosave
+                  executePreCompactHooks();
                   stdout.write("\n\n");
                   // Show alert if configured
                   const cfg = loadConfig();
@@ -687,6 +707,8 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                   }
                   // Execute SessionEnd hooks after prompt completion
                   executeSessionEndHooks();
+                  // Execute SubagentStop hooks after session end
+                  executeSubagentStopHooks();
                   abortController = null;
                   resolve();
                 },
