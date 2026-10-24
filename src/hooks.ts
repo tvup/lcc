@@ -265,7 +265,7 @@ export function renderHook(hook: Hook, args: string): string {
 
 export function executeSessionEndHooks(): void {
   const hooks = loadAllHooks().filter(
-    (h) => h.hookType === "SessionEnd" || h.hookType === undefined
+    (h) => h.hookType === "SessionEnd"
   );
   for (const hook of hooks) {
     const body = renderHook(hook, "");
