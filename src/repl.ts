@@ -147,6 +147,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
 
   const commandDefs = [
     { cmd: "/help", desc: t("cmd.help") },
+    { cmd: "/hooks", desc: t("cmd.hooks") },
     { cmd: "/clear", desc: t("cmd.clear") },
     { cmd: "/config", desc: t("cmd.config") },
     { cmd: "/model", desc: t("cmd.model") },
