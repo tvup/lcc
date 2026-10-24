@@ -74,8 +74,8 @@ export function loadPlugins(): Record<string, { path?: string; version?: string;
   return merged;
 }
 
-function loadClaudePlugins(pluginsDir: string): Record<string, { path: string; version: string; installed: boolean }> {
-  const result: Record<string, { path: string; version: string; installed: boolean }> = {};
+export function loadClaudePlugins(pluginsDir: string): Record<string, { path: string; version: string; installed: boolean; name?: string }> {
+  const result: Record<string, { path: string; version: string; installed: boolean; name?: string }> = {};
   
   if (!existsSync(pluginsDir)) return result;
   
@@ -84,24 +84,25 @@ function loadClaudePlugins(pluginsDir: string): Record<string, { path: string; v
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const pluginPath = join(pluginsDir, entry.name);
-      const installedPath = join(pluginPath, "installed");
+      const pluginJsonPath = join(pluginPath, ".claude-plugin", "plugin.json");
       
-      // Check if plugin has valid structure
-      if (existsSync(installedPath)) {
-        // Try to read version from package.json or similar
+      // Check if plugin has valid structure with .claude-plugin/plugin.json
+      if (existsSync(pluginJsonPath)) {
+        // Read plugin name and version from plugin.json
+        let name = entry.name;
         let version = "unknown";
-        const packageJsonPath = join(pluginPath, "package.json");
-        if (existsSync(packageJsonPath)) {
-          try {
-            const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-            version = pkg.version || "unknown";
-          } catch {}
-        }
         
-        result[entry.name] = {
+        try {
+          const pkg = JSON.parse(readFileSync(pluginJsonPath, "utf-8"));
+          name = pkg.name || entry.name;
+          version = pkg.version || "unknown";
+        } catch {}
+        
+        result[name] = {
           path: pluginPath,
           version,
           installed: true,
+          name,
         };
       }
     }
