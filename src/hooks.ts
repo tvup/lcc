@@ -58,12 +58,12 @@ function parsePluginHookFile(filePath: string, source: Hook["source"]): Hook[] {
     // Each key in json.hooks is a hook type (SessionEnd, PreToolUse, etc.)
     for (const [hookType, definitions] of Object.entries(json.hooks)) {
       for (const def of definitions) {
-        for (const hook of def.hooks) {
+        for (const defHook of def.hooks) {
           const name = `plugin_${hookType}`;
           const hook: Hook = {
             name,
-            description: `${hookType} hook via ${hook.command}`,
-            body: hook.command,
+            description: `${hookType} hook via ${defHook.command}`,
+            body: defHook.command,
             source,
             path: filePath,
             hookType,
