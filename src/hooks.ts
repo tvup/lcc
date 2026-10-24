@@ -35,7 +35,8 @@ export interface Hook {
 
 const CLAUDE_HOOKS_DIR = join(process.env.HOME || "", ".claude", "hooks");
 const USER_HOOKS_DIR = join(CONFIG_DIR, "hooks");
-const CLAUDE_PLUGINS_DIR = join(process.env.HOME || "", ".claude", "plugins");
+const CLAUDE_PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(process.env.HOME || "", ".claude", "plugins");
+const CLAUDE_PLUGINS_DIR = CLAUDE_PLUGIN_ROOT;
 
 /**
  * Check if a file is a JSON hook file (Claude Code plugin format)
@@ -267,10 +268,14 @@ export function executeSessionEndHooks(): void {
   const hooks = loadAllHooks().filter(
     (h) => h.hookType === "SessionEnd"
   );
+  const event = {};
   for (const hook of hooks) {
     const body = renderHook(hook, "");
     if (body) {
-      execSync(body, { stdio: "pipe" });
+      execSync(body, {
+        stdio: "pipe",
+        input: JSON.stringify(event),
+      });
     }
   }
 }
@@ -282,10 +287,14 @@ export function executePreToolUseHooks(tool: string): void {
   const hooks = loadAllHooks().filter(
     (h) => h.hookType === "PreToolUse"
   );
+  const event = { tool };
   for (const hook of hooks) {
     const body = renderHook(hook, tool);
     if (body) {
-      execSync(body, { stdio: "pipe" });
+      execSync(body, {
+        stdio: "pipe",
+        input: JSON.stringify(event),
+      });
     }
   }
 }
@@ -297,10 +306,14 @@ export function executePostToolUseHooks(tool: string): void {
   const hooks = loadAllHooks().filter(
     (h) => h.hookType === "PostToolUse"
   );
+  const event = { tool };
   for (const hook of hooks) {
     const body = renderHook(hook, tool);
     if (body) {
-      execSync(body, { stdio: "pipe" });
+      execSync(body, {
+        stdio: "pipe",
+        input: JSON.stringify(event),
+      });
     }
   }
 }
@@ -312,10 +325,21 @@ export function executeUserPromptSubmitHooks(prompt: string): void {
   const hooks = loadAllHooks().filter(
     (h) => h.hookType === "UserPromptSubmit"
   );
+
+  const event = {
+    hook_event_name: "UserPromptSubmit",
+    cwd: process.cwd(),
+    prompt,
+  };
+
   for (const hook of hooks) {
     const body = renderHook(hook, prompt);
+
     if (body) {
-      execSync(body, { stdio: "pipe" });
+      execSync(body, {
+        stdio: "pipe",
+        input: JSON.stringify(event),
+      });
     }
   }
 }
@@ -327,10 +351,14 @@ export function executePreCompactHooks(): void {
   const hooks = loadAllHooks().filter(
     (h) => h.hookType === "PreCompact"
   );
+  const event = {};
   for (const hook of hooks) {
     const body = renderHook(hook, "");
     if (body) {
-      execSync(body, { stdio: "pipe" });
+      execSync(body, {
+        stdio: "pipe",
+        input: JSON.stringify(event),
+      });
     }
   }
 }
@@ -342,10 +370,14 @@ export function executeSubagentStopHooks(): void {
   const hooks = loadAllHooks().filter(
     (h) => h.hookType === "SubagentStop"
   );
+  const event = {};
   for (const hook of hooks) {
     const body = renderHook(hook, "");
     if (body) {
-      execSync(body, { stdio: "pipe" });
+      execSync(body, {
+        stdio: "pipe",
+        input: JSON.stringify(event),
+      });
     }
   }
 }

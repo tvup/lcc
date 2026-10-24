@@ -1,6 +1,6 @@
 {
   "name": "lcc",
-  "version": "1.0.121",
+  "version": "1.0.122",
   "type": "module",
   "bin": {
     "lcc": "./dist/index.js"
@@ -24,6 +24,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "chalk": "^4.1.2",
+    "dotenv": "^18.0.9",
     "ws": "^8.22.0"
   }
 }

@@ -58,9 +58,36 @@ export function loadPlugins(): Record<string, { path?: string; version?: string;
   const cfg = loadConfig();
   const lccPlugins = cfg.plugins ?? {};
   
-  // Also load Claude Code plugins from ~/.claude/plugins/
-  const claudePluginsDir = join(process.env["HOME"] || "", ".claude", "plugins");
-  const claudePlugins = loadClaudePlugins(claudePluginsDir);
+  // Also load Claude Code plugins - respect CLAUDE_PLUGIN_ROOT if set, otherwise use default
+  // Support colon-separated paths like PATH (first occurrence wins)
+  const claudePluginsDir = process.env.CLAUDE_PLUGIN_ROOT || join(process.env["HOME"] || "", ".claude", "plugins");
+  const claudePluginsDirs = claudePluginsDir.split(":");
+  
+  // Collect all unique Claude plugins from all directories
+  const claudePlugins: Record<string, { path: string; version: string; installed: boolean; name?: string }> = {};
+  for (const dir of claudePluginsDirs) {
+    if (!existsSync(dir)) continue;
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const pluginKey = entry.name;
+        // Check for claude-plugin.json manifest
+        const manifestPath = join(dir, pluginKey, ".claude-plugin", "plugin.json");
+        if (existsSync(manifestPath)) {
+          const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+          // Only add if not already found (first occurrence wins)
+          if (!claudePlugins[pluginKey]) {
+            claudePlugins[pluginKey] = {
+              path: join(dir, pluginKey),
+              version: manifest.version || "unknown",
+              installed: true,
+              name: manifest.name || pluginKey
+            };
+          }
+        }
+      }
+    }
+  }
   
   // Merge both, Claude plugins get type: "claude"
   const merged: Record<string, { path?: string; version?: string; installed: boolean; type?: "lcc" | "claude" }> = { ...lccPlugins };
