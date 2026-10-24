@@ -2,6 +2,23 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { CONFIG_DIR } from "./config.js";
 
+/**
+ * Hook as defined in Claude Code plugin JSON format
+ * https://docs.anthropic.com/en/docs/claude-code/hooks
+ */
+export interface PluginHookDefinition {
+  matcher?: string;
+  hooks: Array<{
+    type: "command" | "command_substitution";
+    command: string;
+    async?: boolean;
+  }>;
+}
+
+export interface PluginHookFile {
+  hooks: Record<string, PluginHookDefinition[]>;
+}
+
 export interface Hook {
   name: string;
   description: string;
@@ -9,10 +26,58 @@ export interface Hook {
   source: "claude" | "project" | "user";
   // Optional: path to the actual hook script/file
   path?: string;
+  // For JSON plugin hooks, store the hook type (SessionEnd, PreToolUse, etc.)
+  hookType?: string;
+  // Indicates this is a Claude Code plugin hook
+  isPluginHook?: boolean;
 }
 
 const CLAUDE_HOOKS_DIR = join(process.env.HOME || "", ".claude", "hooks");
 const USER_HOOKS_DIR = join(CONFIG_DIR, "hooks");
+const CLAUDE_PLUGINS_DIR = join(process.env.HOME || "", ".claude", "plugins");
+
+/**
+ * Check if a file is a JSON hook file (Claude Code plugin format)
+ */
+function isJsonHookFile(file: string): boolean {
+  return file.endsWith(".json");
+}
+
+/**
+ * Parse a JSON hook file (Claude Code plugin format)
+ */
+function parsePluginHookFile(filePath: string, source: Hook["source"]): Hook[] {
+  const hooks: Hook[] = [];
+  try {
+    const raw = readFileSync(filePath, "utf-8").trim();
+    if (!raw) return hooks;
+
+    const json = JSON.parse(raw) as PluginHookFile;
+    if (!json.hooks) return hooks;
+
+    // Each key in json.hooks is a hook type (SessionEnd, PreToolUse, etc.)
+    for (const [hookType, definitions] of Object.entries(json.hooks)) {
+      for (const def of definitions) {
+        for (const hook of def.hooks) {
+          const name = `plugin_${hookType}`;
+          const hook: Hook = {
+            name,
+            description: `${hookType} hook via ${hook.command}`,
+            body: hook.command,
+            source,
+            path: filePath,
+            hookType,
+            isPluginHook: true,
+          };
+          hooks.push(hook);
+        }
+      }
+    }
+  } catch {
+    // ignore JSON parse errors
+  }
+  return hooks;
+}
 
 /**
  * Parse a hook file and extract metadata
