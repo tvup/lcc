@@ -10,6 +10,7 @@ import { loadConfig, saveConfig, CONFIG_DIR, loadPlugins, savePlugins, ensurePlu
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
 import { loadSkills, findSkill, renderSkill, type Skill } from "./skills.js";
+import { loadAllHooks, findHook, renderHook, type Hook } from "./hooks.js";
 import { loadAddons, detectAddons } from "./addons.js";
 import { Spinner } from "./spinner.js";
 import { t, setLocale, getLocale, confirmYes, confirmHint } from "./i18n.js";
@@ -166,7 +167,12 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
     cmd: `/${s.name}`,
     desc: s.description || (s.source === "project" ? t("repl.skill_source_project") : t("repl.skill_source_user")),
   }));
-  const commands = [...commandDefs.map((c) => c.cmd), ...skillDefs.map((s) => s.cmd), "/quit"];
+  const hooks = loadAllHooks();
+  const hookDefs = hooks.map((h) => ({
+    cmd: `/${h.name}`,
+    desc: h.description || (h.source === "claude" ? t("repl.hook_source_claude") : h.source === "project" ? t("repl.hook_source_project") : t("repl.hook_source_user")),
+  }));
+  const commands = [...commandDefs.map((c) => c.cmd), ...skillDefs.map((s) => s.cmd), ...hookDefs.map((h) => h.cmd), "/quit"];
   let cachedModelIds: string[] = [];
   let hintLines = 0;
   let modelsFetched = false;
@@ -438,6 +444,13 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
         for (const s of skills) {
           const source = chalk.dim(`[${s.source === "project" ? t("repl.skill_source_project") : t("repl.skill_source_user")}]`);
           console.log(`  ${chalk.cyan(`/${s.name}`.padEnd(12))} ${chalk.dim(s.description || "")} ${source}`);
+        }
+      }
+      if (hooks.length > 0) {
+        console.log(chalk.dim(`\n  ${t("repl.hooks_header")}`));
+        for (const h of hooks) {
+          const source = chalk.dim(`[${h.source === "claude" ? t("repl.hook_source_claude") : h.source === "project" ? t("repl.hook_source_project") : t("repl.hook_source_user")}]`);
+          console.log(`  ${chalk.cyan(`/${h.name}`.padEnd(12))} ${chalk.dim(h.description || "")} ${source}`);
         }
       }
       console.log(`\n  ${chalk.dim(t("repl.ctrl_c"))}`);
