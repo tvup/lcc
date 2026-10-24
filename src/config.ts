@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, chmodSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { t, setLocale } from "./i18n.js";
@@ -9,7 +9,7 @@ export interface Config {
   agentId?: string;
   advisorModel?: string;
   language?: string;
-  plugins?: Record<string, { path?: string; version?: string; installed: boolean }>;
+  plugins?: Record<string, { path?: string; version?: string; installed: boolean; type?: "lcc" | "claude" }>;
   showPromptFinishAlert?: boolean;
 }
 
@@ -54,9 +54,60 @@ export function saveConfig(config: Config): void {
   chmodSync(CONFIG_FILE, 0o600);
 }
 
-export function loadPlugins(): Record<string, { path?: string; version?: string; installed: boolean }> {
+export function loadPlugins(): Record<string, { path?: string; version?: string; installed: boolean; type?: "lcc" | "claude" }> {
   const cfg = loadConfig();
-  return cfg.plugins ?? {};
+  const lccPlugins = cfg.plugins ?? {};
+  
+  // Also load Claude Code plugins from ~/.claude/plugins/
+  const claudePluginsDir = join(process.env["HOME"] || "", ".claude", "plugins");
+  const claudePlugins = loadClaudePlugins(claudePluginsDir);
+  
+  // Merge both, Claude plugins get type: "claude"
+  const merged: Record<string, { path?: string; version?: string; installed: boolean; type?: "lcc" | "claude" }> = { ...lccPlugins };
+  
+  for (const [name, info] of Object.entries(claudePlugins)) {
+    if (!merged[name]) {
+      merged[name] = { ...info, type: "claude" };
+    }
+  }
+  
+  return merged;
+}
+
+function loadClaudePlugins(pluginsDir: string): Record<string, { path: string; version: string; installed: boolean }> {
+  const result: Record<string, { path: string; version: string; installed: boolean }> = {};
+  
+  if (!existsSync(pluginsDir)) return result;
+  
+  const entries = readdirSync(pluginsDir, { withFileTypes: true });
+  
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const pluginPath = join(pluginsDir, entry.name);
+      const installedPath = join(pluginPath, "installed");
+      
+      // Check if plugin has valid structure
+      if (existsSync(installedPath)) {
+        // Try to read version from package.json or similar
+        let version = "unknown";
+        const packageJsonPath = join(pluginPath, "package.json");
+        if (existsSync(packageJsonPath)) {
+          try {
+            const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+            version = pkg.version || "unknown";
+          } catch {}
+        }
+        
+        result[entry.name] = {
+          path: pluginPath,
+          version,
+          installed: true,
+        };
+      }
+    }
+  }
+  
+  return result;
 }
 
 export function savePlugins(plugins: Record<string, { path?: string; version?: string; installed: boolean }>): void {

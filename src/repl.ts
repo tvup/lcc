@@ -1376,14 +1376,44 @@ async function doPlugin(rl: readline.Interface, arg: string): Promise<void> {
     console.log(`  ${t("plugin.usage")}`);
     const plugins = loadPlugins();
     const entries = Object.entries(plugins);
-    if (entries.length === 0) {
-      console.log(chalk.yellow(`  ${t("plugin.no_plugins")}`));
-    } else {
+    
+    // Separate LCC and Claude plugins
+    const lccPlugins: [string, any][] = [];
+    const claudePlugins: [string, any][] = [];
+    
+    for (const [pName, info] of entries) {
+      if (info.type === "claude") {
+        claudePlugins.push([pName, info]);
+      } else {
+        lccPlugins.push([pName, info]);
+      }
+    }
+    
+    console.log();
+    // Show LCC plugins first
+    if (lccPlugins.length > 0) {
       console.log(`  ${t("plugin.list_header")}`);
-      entries.forEach(([pName, info]) => {
+      lccPlugins.forEach(([pName, info]) => {
         const status = info.installed ? chalk.green("✓") : chalk.dim("○");
         console.log(`  ${status} ${pName}${info.version ? chalk.dim(` v${info.version}`) : ""}`);
       });
+      console.log();
+    }
+    
+    // Show Claude plugins
+    if (claudePlugins.length > 0) {
+      console.log(`  ${t("plugin.claude_header")}`);
+      claudePlugins.forEach(([pName, info]) => {
+        const status = info.installed ? chalk.green("✓") : chalk.dim("○");
+        console.log(`  ${status} ${pName}${info.version ? chalk.dim(` v${info.version}`) : ""}`);
+      });
+      console.log();
+    }
+    
+    // Combined total
+    const total = lccPlugins.length + claudePlugins.length;
+    if (total === 0) {
+      console.log(chalk.yellow(`  ${t("plugin.no_plugins")}`));
     }
     return;
   }
@@ -1422,6 +1452,107 @@ async function doPlugin(rl: readline.Interface, arg: string): Promise<void> {
       return;
     }
 
+    console.log(chalk.yellow(`  ${t("repl.unknown_plugin_cmd")}`));
+    return;
+  }
+
+  if (sub === "claude" || sub === "claudo") {
+    const claudeAction = parts[2];
+    const plugins = loadPlugins();
+    const claudeEntries = Object.entries(plugins).filter(([_, info]) => info.type === "claude");
+    
+    if (!claudeAction) {
+      console.log(`  ${t("plugin.claude_header")}`);
+      if (claudeEntries.length === 0) {
+        console.log(chalk.yellow(`  ${t("plugin.claude_no_plugins")}`));
+      } else {
+        claudeEntries.forEach(([pName, info]) => {
+          const status = info.installed ? chalk.green("✓") : chalk.dim("○");
+          console.log(`  ${status} ${pName}${info.version ? chalk.dim(` v${info.version}`) : ""}`);
+        });
+      }
+      console.log(`  ${t("plugin.claude_usage")}`);
+      return;
+    }
+    
+    if (claudeAction === "list" || claudeAction === "liste") {
+      if (claudeEntries.length === 0) {
+        console.log(chalk.yellow(`  ${t("plugin.claude_no_plugins")}`));
+      } else {
+        console.log(`  ${t("plugin.claude_header")}`);
+        claudeEntries.forEach(([pName, info]) => {
+          const status = info.installed ? chalk.green("✓") : chalk.dim("○");
+          console.log(`  ${status} ${pName}${info.version ? chalk.dim(` v${info.version}`) : ""}`);
+        });
+      }
+      return;
+    }
+    
+    if (claudeAction === "install" || claudeAction === "installér") {
+      const fullName = parts.slice(3).join(" ").trim();
+      if (!fullName) {
+        console.log(chalk.yellow(`  ${t("repl.specify_plugin")}`));
+        return;
+      }
+      
+      // Parse name@version or just name
+      const atIndex = fullName.lastIndexOf("@");
+      let name = fullName;
+      let version: string | undefined;
+      if (atIndex > 0) {
+        name = fullName.slice(0, atIndex);
+        version = fullName.slice(atIndex + 1);
+      }
+      
+      if (plugins[name] && plugins[name].type === "claude") {
+        console.log(chalk.yellow(`  ${t("plugin.claude_already_installed", name)}`));
+        return;
+      }
+      
+      // Try to find the plugin in ~/.claude/plugins/
+      const claudePluginsDir = join(process.env["HOME"] || "", ".claude", "plugins");
+      const pluginDir = join(claudePluginsDir, name);
+      
+      if (!existsSync(pluginDir)) {
+        console.log(chalk.yellow(`  ${t("plugin.not_found", name)}`));
+        return;
+      }
+      
+      // Read version from package.json if available
+      let pluginVersion = version;
+      const packageJsonPath = join(pluginDir, "package.json");
+      if (existsSync(packageJsonPath) && !version) {
+        try {
+          const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+          pluginVersion = pkg.version || "unknown";
+        } catch {}
+      }
+      
+      ensurePluginDir();
+      const updated = { ...plugins, [name]: { path: pluginDir, version: pluginVersion || "unknown", installed: true, type: "claude" } };
+      savePlugins(updated);
+      console.log(chalk.green(`  ${t("plugin.claude_install_success", name)}${pluginVersion ? chalk.dim(` v${pluginVersion}`) : ""}`));
+      return;
+    }
+    
+    if (claudeAction === "remove" || claudeAction === "fjern") {
+      const name = parts[3];
+      if (!name) {
+        console.log(chalk.yellow(`  ${t("repl.specify_plugin")}`));
+        return;
+      }
+      const plugins = loadPlugins();
+      if (!plugins[name] || plugins[name].type !== "claude") {
+        console.log(chalk.yellow(`  ${t("plugin.not_found", name)}`));
+        return;
+      }
+      const updated = { ...plugins };
+      delete updated[name];
+      savePlugins(updated);
+      console.log(chalk.green(`  ${t("repl.plugin_removed", name)}`));
+      return;
+    }
+    
     console.log(chalk.yellow(`  ${t("repl.unknown_plugin_cmd")}`));
     return;
   }
