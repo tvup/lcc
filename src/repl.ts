@@ -10,7 +10,7 @@ import { loadConfig, saveConfig, CONFIG_DIR, loadPlugins, savePlugins, ensurePlu
 import { MarkdownRenderer } from "./markdown.js";
 import type { McpManager } from "./mcp.js";
 import { loadSkills, findSkill, renderSkill, type Skill } from "./skills.js";
-import { loadAllHooks, findHook, renderHook, type Hook } from "./hooks.js";
+import { executeSessionEndHooks, loadAllHooks, findHook, renderHook, type Hook } from "./hooks.js";
 import { loadAddons, detectAddons } from "./addons.js";
 import { Spinner } from "./spinner.js";
 import { t, setLocale, getLocale, confirmYes, confirmHint } from "./i18n.js";
@@ -685,6 +685,8 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
                   if (cfg.showPromptFinishAlert) {
                     stdout.write(`${t("repl.prompt_finish_alert")}\n`);
                   }
+                  // Execute SessionEnd hooks after prompt completion
+                  executeSessionEndHooks();
                   abortController = null;
                   resolve();
                 },

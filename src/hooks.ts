@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
+import { execSync } from "node:child_process";
 import { CONFIG_DIR } from "./config.js";
 
 /**
@@ -260,4 +261,16 @@ export function findHook(hooks: Hook[], name: string): Hook | undefined {
 export function renderHook(hook: Hook, args: string): string {
   if (!hook.body) return "";
   return hook.body.replace(/\$ARGUMENTS/g, args);
+}
+
+export function executeSessionEndHooks(): void {
+  const hooks = loadAllHooks().filter(
+    (h) => h.hookType === "SessionEnd" || (h.source === "claude-plugin" && h.hookType === "SessionEnd")
+  );
+  for (const hook of hooks) {
+    const body = renderHook(hook, "");
+    if (body) {
+      execSync(body, { stdio: "pipe" });
+    }
+  }
 }
