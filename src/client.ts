@@ -93,15 +93,29 @@ function detectUnverifiedClaims(text: string, toolItems: InputItem[]): string | 
 }
 
 function compressInputHistory(input: InputItem[]): InputItem[] {
+  // Guard: remove orphaned function_call_output items whose matching function_call
+  // is not present in the input. This can happen after summarizeOldHistory splits
+  // a pair, leaving function_call_output without its function_call.
+  const functionCallIds = new Set<string>();
+  for (const item of input) {
+    if (item.type === "function_call") functionCallIds.add(item.call_id);
+  }
+  const filteredInput = input.filter(item => {
+    if (item.type === "function_call_output") {
+      return functionCallIds.has(item.call_id);
+    }
+    return true;
+  })
+
   // Find the most recent N tool output call_ids to protect
   const outputIndices: number[] = [];
-  for (let i = input.length - 1; i >= 0; i--) {
-    if (input[i]!.type === "function_call_output") outputIndices.push(i);
+  for (let i = filteredInput.length - 1; i >= 0; i--) {
+    if (filteredInput[i]!.type === "function_call_output") outputIndices.push(i);
   }
 
   const recentCallIds = new Set<string>();
   for (let p = 0; p < Math.min(RECENT_TOOL_PAIRS, outputIndices.length); p++) {
-    const item = input[outputIndices[p]!]!;
+    const item = filteredInput[outputIndices[p]!]!;
     if (item.type === "function_call_output") recentCallIds.add(item.call_id);
   }
 
