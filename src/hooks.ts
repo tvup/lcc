@@ -23,7 +23,7 @@ export interface Hook {
   name: string;
   description: string;
   body?: string;
-  source: "claude" | "project" | "user";
+  source: "claude" | "project" | "user" | "claude-plugin";
   // Optional: path to the actual hook script/file
   path?: string;
   // For JSON plugin hooks, store the hook type (SessionEnd, PreToolUse, etc.)
@@ -130,6 +130,7 @@ export function loadClaudeHooks(): Hook[] {
   }
 
   try {
+    // First, load traditional shell hooks from ~/.claude/hooks/
     for (const file of readdirSync(CLAUDE_HOOKS_DIR)) {
       if (!file.endsWith(".sh") && !file.endsWith(".bash") && !file.endsWith(".ts")) continue;
       const filePath = join(CLAUDE_HOOKS_DIR, file);
@@ -137,6 +138,30 @@ export function loadClaudeHooks(): Hook[] {
       if (hook && !seen.has(hook.name)) {
         hooks.push(hook);
         seen.add(hook.name);
+      }
+    }
+
+    // Then, load JSON hook files from Claude Code plugins (~/.claude/plugins/*/hooks/*.json)
+    if (existsSync(CLAUDE_PLUGINS_DIR)) {
+      const pluginDirs = readdirSync(CLAUDE_PLUGINS_DIR, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
+
+      for (const pluginDir of pluginDirs) {
+        const pluginHooksDir = join(CLAUDE_PLUGINS_DIR, pluginDir, "hooks");
+        if (!existsSync(pluginHooksDir)) continue;
+
+        for (const file of readdirSync(pluginHooksDir)) {
+          if (!isJsonHookFile(file)) continue;
+          const filePath = join(pluginHooksDir, file);
+          const pluginHooks = parsePluginHookFile(filePath, "claude-plugin");
+          for (const hook of pluginHooks) {
+            if (!seen.has(hook.name)) {
+              hooks.push(hook);
+              seen.add(hook.name);
+            }
+          }
+        }
       }
     }
   } catch { /* ignore */ }

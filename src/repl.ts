@@ -633,6 +633,7 @@ export async function startRepl(client: LibreChatClient, mcp?: McpManager): Prom
         console.log("No hooks installed in ~/.claude/hooks/");
       }
       console.log("");
+      continue;
     }
 
     if (trimmed.startsWith("/")) {
